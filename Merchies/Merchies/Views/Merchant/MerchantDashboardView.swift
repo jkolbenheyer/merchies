@@ -24,7 +24,7 @@ struct MerchantDashboardView: View {
                     
                     Toggle("", isOn: $isStoreActive)
                         .labelsHidden()
-                        .toggleStyle(SwitchToggleStyle(tint: .purple))
+                        .toggleStyle(SwitchToggleStyle(tint: .cyan))
                 }
                 .padding()
                 .background(Color(.systemGray6))
@@ -48,7 +48,7 @@ struct MerchantDashboardView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
-                        .background(Color.purple)
+                        .background(Color.cyan)
                         .cornerRadius(10)
                     }
                     
@@ -59,15 +59,15 @@ struct MerchantDashboardView: View {
                         VStack(spacing: 8) {
                             Image(systemName: "plus.circle")
                                 .font(.system(size: 24))
-                                .foregroundColor(.purple)
+                                .foregroundColor(.cyan)
                             Text("Add Product")
                                 .font(.caption)
                                 .fontWeight(.medium)
-                                .foregroundColor(.purple)
+                                .foregroundColor(.cyan)
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
-                        .background(Color.purple.opacity(0.1))
+                        .background(Color.cyan.opacity(0.1))
                         .cornerRadius(10)
                     }
                 }
@@ -83,7 +83,7 @@ struct MerchantDashboardView: View {
                 if productViewModel.isLoading {
                     ProgressView()
                         .scaleEffect(1.5)
-                        .progressViewStyle(CircularProgressViewStyle(tint: .purple))
+                        .progressViewStyle(CircularProgressViewStyle(tint: .cyan))
                 } else if productViewModel.products.isEmpty {
                     // Empty state
                     VStack(spacing: 20) {
@@ -112,7 +112,7 @@ struct MerchantDashboardView: View {
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
                                 .padding()
-                                .background(Color.purple)
+                                .background(Color.cyan)
                                 .cornerRadius(10)
                             }
                             
@@ -124,10 +124,10 @@ struct MerchantDashboardView: View {
                                     Text("Add Your First Product")
                                 }
                                 .fontWeight(.semibold)
-                                .foregroundColor(.purple)
+                                .foregroundColor(.cyan)
                                 .frame(maxWidth: .infinity)
                                 .padding()
-                                .background(Color.purple.opacity(0.1))
+                                .background(Color.cyan.opacity(0.1))
                                 .cornerRadius(10)
                             }
                         }
@@ -204,7 +204,7 @@ struct MerchantDashboardView: View {
                                         
                                         Text("$\(String(format: "%.2f", product.price))")
                                             .font(.subheadline)
-                                            .foregroundColor(.purple)
+                                            .foregroundColor(.cyan)
                                         
                                         // Show available sizes
                                         Text(product.sizes.joined(separator: ", "))
@@ -270,7 +270,7 @@ struct MerchantDashboardView: View {
                 AddProductView(bandId: getMerchantBandId())
             }
             .sheet(item: $showingProductDetail) { product in
-                ProductDetailView(product: product)
+                MerchantProductDetailView(product: product)
             }
             .onAppear {
                 loadMerchantProducts()
@@ -363,7 +363,7 @@ struct MerchantDashboardView: View {
     }
 }
 
-// Modified AddProductView to accept bandId
+// Modified AddProductView to accept bandId with Cyan theme
 struct AddProductView: View {
     @StateObject private var productViewModel = ProductViewModel()
     @Environment(\.presentationMode) var presentationMode
@@ -442,7 +442,7 @@ struct AddProductView: View {
                                     Spacer()
                                     if selectedSizes.contains(size) {
                                         Image(systemName: "checkmark")
-                                            .foregroundColor(.purple)
+                                            .foregroundColor(.cyan)
                                     }
                                 }
                             }
