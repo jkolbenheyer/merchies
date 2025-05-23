@@ -10,11 +10,6 @@ enum AuthState {
     case signedOut
 }
 
-enum UserRole: String, Codable {
-    case fan
-    case merchant
-    case admin
-}
 
 class AuthViewModel: ObservableObject {
     @Published var user: User?

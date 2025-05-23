@@ -55,12 +55,20 @@
 			);
 			target = 96EFC2042DDE25580024B3FB /* MerchiesUITests */;
 		};
+		96EFC2E42DE0F7570024B3FB /* Exceptions for "Merchies" folder in "Merchies" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Views/Merchant/Untitled.swift,
+			);
+			target = 96EFC1ED2DDE25570024B3FB /* Merchies */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		96EFC1F02DDE25570024B3FB /* Merchies */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
+				96EFC2E42DE0F7570024B3FB /* Exceptions for "Merchies" folder in "Merchies" target */,
 				96EFC2292DDE321B0024B3FB /* Exceptions for "Merchies" folder in "MerchiesTests" target */,
 				96EFC22A2DDE321B0024B3FB /* Exceptions for "Merchies" folder in "MerchiesUITests" target */,
 			);

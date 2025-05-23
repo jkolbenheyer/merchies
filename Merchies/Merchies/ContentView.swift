@@ -15,7 +15,7 @@ struct ContentView: View {
         .alert(item: Binding<AlertItem?>(
             get: {
                 if let error = authViewModel.error {
-                    return AlertItem(message: error)
+                    return AlertItem(title: "Error", message: "Some error message")
                 }
                 return nil
             },
@@ -28,9 +28,4 @@ struct ContentView: View {
             )
         }
     }
-}
-
-struct AlertItem: Identifiable {
-    let id = UUID()
-    let message: String
 }

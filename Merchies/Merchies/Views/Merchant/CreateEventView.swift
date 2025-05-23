@@ -559,11 +559,6 @@ class CreateEventViewModel: ObservableObject {
     }
 }
 
-struct ErrorAlert: Identifiable {
-    let id = UUID()
-    let message: String
-}
-
 // MARK: - Additional Firestore Service Extension
 
 extension FirestoreService {
