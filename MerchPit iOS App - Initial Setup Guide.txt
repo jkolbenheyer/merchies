@@ -1,0 +1,3400 @@
+// MerchPit iOS App - Initial Setup Guide
+
+/*
+This guide will walk you through setting up your MerchPit iOS app with Firebase.
+Follow these steps in order to create the project foundation.
+*/
+
+// STEP 1: Create a new Xcode project
+// File > New > Project > iOS > App
+// Product Name: MerchPit
+// Interface: SwiftUI
+// Language: Swift
+// Organization Identifier: com.yourcompany (replace with your identifier)
+// Include Tests: Checked
+
+// STEP 2: Setup Firebase
+// 1. Create a Firebase project at console.firebase.google.com
+// 2. Add an iOS app in Firebase console with your Bundle ID
+// 3. Download GoogleService-Info.plist and add to your Xcode project
+// 4. Add the Firebase SDK via Swift Package Manager:
+//    - In Xcode: File > Add Packages
+//    - Enter URL: https://github.com/firebase/firebase-ios-sdk
+//    - Select packages:
+//      - FirebaseAuth
+//      - FirebaseFirestore
+//      - FirebaseStorage
+//      - FirebaseFirestoreSwift
+
+// STEP 3: Initialize Firebase in your app
+
+// In MerchPitApp.swift:
+import SwiftUI
+import Firebase
+
+@main
+struct MerchPitApp: App {
+    
+    @StateObject private var authViewModel = AuthViewModel()
+    
+    init() {
+        FirebaseApp.configure()
+    }
+    
+    var body: some Scene {
+        WindowGroup {
+            ContentView()
+                .environmentObject(authViewModel)
+        }
+    }
+}
+
+// STEP 4: Add Firebase Authentication
+
+// AuthViewModel.swift
+import Foundation
+import Firebase
+import FirebaseAuth
+import SwiftUI
+import Combine
+
+enum AuthState {
+    case signedIn
+    case signedOut
+}
+
+enum UserRole: String, Codable {
+    case fan
+    case merchant
+    case admin
+}
+
+class AuthViewModel: ObservableObject {
+    @Published var user: User?
+    @Published var authState: AuthState = .signedOut
+    @Published var userRole: UserRole = .fan
+    @Published var isLoading: Bool = false
+    @Published var error: String?
+    
+    private var handle: AuthStateDidChangeListenerHandle?
+    
+    init() {
+        setupAuthListener()
+    }
+    
+    func setupAuthListener() {
+        handle = Auth.auth().addStateDidChangeListener { auth, user in
+            self.user = user
+            self.authState = user != nil ? .signedIn : .signedOut
+            
+            if let user = user {
+                self.fetchUserRole(userId: user.uid)
+            }
+        }
+    }
+    
+    func fetchUserRole(userId: String) {
+        isLoading = true
+        let db = Firestore.firestore()
+        
+        db.collection("users").document(userId).getDocument { document, error in
+            self.isLoading = false
+            
+            if let error = error {
+                self.error = "Error fetching user role: \(error.localizedDescription)"
+                return
+            }
+            
+            if let document = document, document.exists, 
+               let roleString = document.data()?["role"] as? String,
+               let role = UserRole(rawValue: roleString) {
+                self.userRole = role
+            } else {
+                // Default to fan role
+                self.userRole = .fan
+                // Create user document if it doesn't exist
+                db.collection("users").document(userId).setData([
+                    "role": UserRole.fan.rawValue,
+                    "createdAt": Timestamp(date: Date())
+                ]) { error in
+                    if let error = error {
+                        self.error = "Error creating user profile: \(error.localizedDescription)"
+                    }
+                }
+            }
+        }
+    }
+    
+    func signInWithEmail(email: String, password: String) {
+        isLoading = true
+        error = nil
+        
+        Auth.auth().signIn(withEmail: email, password: password) { result, error in
+            self.isLoading = false
+            
+            if let error = error {
+                self.error = error.localizedDescription
+                return
+            }
+        }
+    }
+    
+    func signInWithApple() {
+        // Implement Apple Sign-In logic here
+        // This would use ASAuthorizationAppleIDProvider and integrate with Firebase Auth
+    }
+    
+    func createAccount(email: String, password: String) {
+        isLoading = true
+        error = nil
+        
+        Auth.auth().createUser(withEmail: email, password: password) { result, error in
+            self.isLoading = false
+            
+            if let error = error {
+                self.error = error.localizedDescription
+                return
+            }
+            
+            // User created successfully, now create their profile
+            if let user = result?.user {
+                let db = Firestore.firestore()
+                db.collection("users").document(user.uid).setData([
+                    "email": email,
+                    "role": UserRole.fan.rawValue,
+                    "createdAt": Timestamp(date: Date())
+                ]) { error in
+                    if let error = error {
+                        self.error = "Error creating user profile: \(error.localizedDescription)"
+                    }
+                }
+            }
+        }
+    }
+    
+    func sendPasswordReset(email: String, completion: @escaping (Bool) -> Void) {
+        isLoading = true
+        error = nil
+        
+        Auth.auth().sendPasswordReset(withEmail: email) { error in
+            self.isLoading = false
+            
+            if let error = error {
+                self.error = error.localizedDescription
+                completion(false)
+                return
+            }
+            
+            completion(true)
+        }
+    }
+    
+    func signOut() {
+        do {
+            try Auth.auth().signOut()
+        } catch let error {
+            self.error = error.localizedDescription
+        }
+    }
+    
+    deinit {
+        if let handle = handle {
+            Auth.auth().removeStateDidChangeListener(handle)
+        }
+    }
+}
+
+// STEP 5: Create the main content view with role-based routing
+
+// ContentView.swift
+import SwiftUI
+
+struct ContentView: View {
+    @EnvironmentObject var authViewModel: AuthViewModel
+    
+    var body: some View {
+        Group {
+            switch authViewModel.authState {
+            case .signedIn:
+                MainTabView()
+            case .signedOut:
+                AuthView()
+            }
+        }
+        .alert(item: Binding<AlertItem?>(
+            get: { 
+                if let error = authViewModel.error {
+                    return AlertItem(message: error)
+                }
+                return nil
+            },
+            set: { _ in authViewModel.error = nil }
+        )) { alertItem in
+            Alert(
+                title: Text("Error"),
+                message: Text(alertItem.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
+    }
+}
+
+struct AlertItem: Identifiable {
+    let id = UUID()
+    let message: String
+}
+
+// STEP 6: Authentication Views
+
+// AuthView.swift
+import SwiftUI
+
+struct AuthView: View {
+    @State private var isSignIn = true
+    @State private var email = ""
+    @State private var password = ""
+    @EnvironmentObject var authViewModel: AuthViewModel
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Logo or app name
+                    Text("MerchPit")
+                        .font(.system(size: 40, weight: .bold))
+                        .foregroundColor(.purple)
+                        .padding(.top, 50)
+                    
+                    // Form
+                    VStack(spacing: 15) {
+                        TextField("Email", text: $email)
+                            .keyboardType(.emailAddress)
+                            .autocapitalization(.none)
+                            .padding()
+                            .background(Color(.systemGray6))
+                            .cornerRadius(8)
+                        
+                        if isSignIn {
+                            SecureField("Password", text: $password)
+                                .padding()
+                                .background(Color(.systemGray6))
+                                .cornerRadius(8)
+                        } else {
+                            SecureField("Create Password", text: $password)
+                                .padding()
+                                .background(Color(.systemGray6))
+                                .cornerRadius(8)
+                        }
+                        
+                        // Primary button
+                        Button(action: {
+                            if isSignIn {
+                                authViewModel.signInWithEmail(email: email, password: password)
+                            } else {
+                                authViewModel.createAccount(email: email, password: password)
+                            }
+                        }) {
+                            Text(isSignIn ? "Sign In" : "Create Account")
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.purple)
+                                .cornerRadius(8)
+                        }
+                        .disabled(email.isEmpty || password.isEmpty || authViewModel.isLoading)
+                        
+                        // Sign in with Apple button
+                        Button(action: {
+                            authViewModel.signInWithApple()
+                        }) {
+                            HStack {
+                                Image(systemName: "apple.logo")
+                                Text("Sign in with Apple")
+                            }
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.black)
+                            .cornerRadius(8)
+                        }
+                        
+                        // Toggle between sign in and create account
+                        Button(action: {
+                            isSignIn.toggle()
+                            // Clear fields when switching modes
+                            email = ""
+                            password = ""
+                        }) {
+                            Text(isSignIn ? "Need an account? Sign Up" : "Already have an account? Sign In")
+                                .foregroundColor(.purple)
+                        }
+                        .padding(.top, 10)
+                        
+                        if isSignIn {
+                            Button("Forgot Password?") {
+                                // Handle forgot password
+                                if !email.isEmpty {
+                                    authViewModel.sendPasswordReset(email: email) { success in
+                                        // Show success message
+                                    }
+                                }
+                            }
+                            .foregroundColor(.purple)
+                            .padding(.top, 5)
+                        }
+                    }
+                    .padding(.horizontal)
+                    
+                    Spacer()
+                }
+            }
+            .navigationBarHidden(true)
+            .overlay(
+                Group {
+                    if authViewModel.isLoading {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .progressViewStyle(CircularProgressViewStyle(tint: .purple))
+                            .background(Color.white.opacity(0.8))
+                            .cornerRadius(10)
+                            .frame(width: 80, height: 80)
+                    }
+                }
+            )
+        }
+    }
+}
+
+// STEP 7: Main Tab View for role-based navigation
+
+// MainTabView.swift
+import SwiftUI
+
+struct MainTabView: View {
+    @EnvironmentObject var authViewModel: AuthViewModel
+    
+    var body: some View {
+        TabView {
+            switch authViewModel.userRole {
+            case .fan:
+                FanDashboardView()
+                    .tabItem {
+                        Label("Discover", systemImage: "music.note")
+                    }
+                
+                OrderHistoryView()
+                    .tabItem {
+                        Label("Orders", systemImage: "bag")
+                    }
+                
+                ProfileView()
+                    .tabItem {
+                        Label("Profile", systemImage: "person")
+                    }
+                
+            case .merchant:
+                MerchantDashboardView()
+                    .tabItem {
+                        Label("Store", systemImage: "tag")
+                    }
+                
+                OrderScannerView()
+                    .tabItem {
+                        Label("Scan", systemImage: "qrcode.viewfinder")
+                    }
+                
+                MerchantSettingsView()
+                    .tabItem {
+                        Label("Settings", systemImage: "gear")
+                    }
+                
+            case .admin:
+                AdminDashboardView()
+                    .tabItem {
+                        Label("Dashboard", systemImage: "chart.bar")
+                    }
+                
+                UserManagementView()
+                    .tabItem {
+                        Label("Users", systemImage: "person.2")
+                    }
+                
+                SettingsView()
+                    .tabItem {
+                        Label("Settings", systemImage: "gear")
+                    }
+            }
+        }
+    }
+}
+
+// STEP 8: Create placeholder views for each tab
+// These will be expanded in future implementations
+
+// Fan Views
+
+struct FanDashboardView: View {
+    var body: some View {
+        NavigationView {
+            VStack {
+                Text("Discover Merch")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .padding()
+                
+                Spacer()
+                Text("Nearby Events Will Appear Here")
+                    .foregroundColor(.gray)
+                Spacer()
+            }
+            .navigationTitle("MerchPit")
+        }
+    }
+}
+
+struct OrderHistoryView: View {
+    var body: some View {
+        NavigationView {
+            VStack {
+                Text("Your Orders")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .padding()
+                
+                Spacer()
+                Text("Your order history will appear here")
+                    .foregroundColor(.gray)
+                Spacer()
+            }
+            .navigationTitle("Orders")
+        }
+    }
+}
+
+struct ProfileView: View {
+    @EnvironmentObject var authViewModel: AuthViewModel
+    
+    var body: some View {
+        NavigationView {
+            VStack {
+                Text("Profile")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .padding()
+                
+                if let user = authViewModel.user {
+                    Text("Email: \(user.email ?? "No email")")
+                        .padding()
+                }
+                
+                Spacer()
+                
+                Button(action: {
+                    authViewModel.signOut()
+                }) {
+                    Text("Sign Out")
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                        .frame(width: 200)
+                        .padding()
+                        .background(Color.red)
+                        .cornerRadius(8)
+                }
+                .padding(.bottom, 50)
+            }
+            .navigationTitle("Your Profile")
+        }
+    }
+}
+
+// Merchant Views
+
+struct MerchantDashboardView: View {
+    var body: some View {
+        NavigationView {
+            VStack {
+                Text("Merch Store")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .padding()
+                
+                Spacer()
+                Text("Your inventory items will appear here")
+                    .foregroundColor(.gray)
+                Spacer()
+                
+                Button(action: {
+                    // Add new merch item
+                }) {
+                    Text("+ Add New Item")
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                        .frame(width: 200)
+                        .padding()
+                        .background(Color.purple)
+                        .cornerRadius(8)
+                }
+                .padding(.bottom, 20)
+            }
+            .navigationTitle("Your Store")
+        }
+    }
+}
+
+struct OrderScannerView: View {
+    var body: some View {
+        NavigationView {
+            VStack {
+                Text("Scan QR Codes")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .padding()
+                
+                Spacer()
+                Image(systemName: "qrcode.viewfinder")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 200, height: 200)
+                    .foregroundColor(.gray)
+                Text("Camera access will be requested")
+                    .foregroundColor(.gray)
+                    .padding()
+                Spacer()
+                
+                Button(action: {
+                    // Start scanning
+                }) {
+                    Text("Start Scanning")
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                        .frame(width: 200)
+                        .padding()
+                        .background(Color.purple)
+                        .cornerRadius(8)
+                }
+                .padding(.bottom, 20)
+            }
+            .navigationTitle("QR Scanner")
+        }
+    }
+}
+
+struct MerchantSettingsView: View {
+    @EnvironmentObject var authViewModel: AuthViewModel
+    
+    var body: some View {
+        NavigationView {
+            VStack {
+                Text("Merchant Settings")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .padding()
+                
+                List {
+                    Section(header: Text("Store Information")) {
+                        Text("Edit Store Profile")
+                        Text("Event Settings")
+                        Text("Payment Details")
+                    }
+                    
+                    Section(header: Text("Account")) {
+                        Button(action: {
+                            authViewModel.signOut()
+                        }) {
+                            Text("Sign Out")
+                                .foregroundColor(.red)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Settings")
+        }
+    }
+}
+
+// Admin Views (Simplified placeholders)
+
+struct AdminDashboardView: View {
+    var body: some View {
+        Text("Admin Dashboard")
+            .font(.largeTitle)
+    }
+}
+
+struct UserManagementView: View {
+    var body: some View {
+        Text("User Management")
+            .font(.largeTitle)
+    }
+}
+
+struct SettingsView: View {
+    @EnvironmentObject var authViewModel: AuthViewModel
+    
+    var body: some View {
+        VStack {
+            Text("Settings")
+                .font(.largeTitle)
+                .padding()
+            
+            Spacer()
+            
+            Button(action: {
+                authViewModel.signOut()
+            }) {
+                Text("Sign Out")
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                    .frame(width: 200)
+                    .padding()
+                    .background(Color.red)
+                    .cornerRadius(8)
+            }
+            .padding(.bottom, 50)
+        }
+    }
+}
+
+// STEP 9: Create data models for the app
+
+// Create a new Swift file called Models.swift
+// Models.swift
+import Foundation
+import FirebaseFirestoreSwift
+
+struct Product: Identifiable, Codable {
+    @DocumentID var id: String?
+    var bandId: String
+    var title: String
+    var price: Double
+    var sizes: [String]
+    var inventory: [String: Int]
+    var imageUrl: String
+    var active: Bool
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case bandId = "band_id"
+        case title
+        case price
+        case sizes
+        case inventory
+        case imageUrl = "image_url"
+        case active
+    }
+}
+
+struct Order: Identifiable, Codable {
+    @DocumentID var id: String?
+    var userId: String
+    var bandId: String
+    var items: [OrderItem]
+    var amount: Double
+    var status: OrderStatus
+    var qrCode: String
+    var createdAt: Date
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case bandId = "band_id"
+        case items
+        case amount
+        case status
+        case qrCode = "qr_code"
+        case createdAt = "created_at"
+    }
+}
+
+struct OrderItem: Codable {
+    var productId: String
+    var size: String
+    var qty: Int
+    
+    enum CodingKeys: String, CodingKey {
+        case productId = "product_id"
+        case size
+        case qty
+    }
+}
+
+enum OrderStatus: String, Codable {
+    case pendingPickup = "pending_pickup"
+    case pickedUp = "picked_up"
+    case cancelled = "cancelled"
+}
+
+struct Event: Identifiable, Codable {
+    @DocumentID var id: String?
+    var name: String
+    var venueName: String
+    var address: String
+    var startDate: Date
+    var endDate: Date
+    var latitude: Double
+    var longitude: Double
+    var geofenceRadius: Double // in meters
+    var active: Bool
+    var merchantIds: [String]
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case venueName = "venue_name"
+        case address
+        case startDate = "start_date"
+        case endDate = "end_date"
+        case latitude
+        case longitude
+        case geofenceRadius = "geofence_radius"
+        case active
+        case merchantIds = "merchant_ids"
+    }
+}
+
+struct Band: Identifiable, Codable {
+    @DocumentID var id: String?
+    var name: String
+    var description: String?
+    var logoUrl: String?
+    var ownerUserId: String
+    var memberUserIds: [String]
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case description
+        case logoUrl = "logo_url"
+        case ownerUserId = "owner_user_id"
+        case memberUserIds = "member_user_ids"
+    }
+}
+
+// STEP 10: Create Firebase service for handling data operations
+
+// Create a new Swift file called FirestoreService.swift
+// FirestoreService.swift
+import Foundation
+import Firebase
+import FirebaseFirestore
+import FirebaseFirestoreSwift
+
+class FirestoreService {
+    private let db = Firestore.firestore()
+    
+    // MARK: - Products
+    
+    func fetchProducts(for eventId: String, completion: @escaping ([Product]?, Error?) -> Void) {
+        // First get bands for this event
+        db.collection("events").document(eventId).getDocument { snapshot, error in
+            if let error = error {
+                completion(nil, error)
+                return
+            }
+            
+            guard let data = snapshot?.data(),
+                  let merchantIds = data["merchant_ids"] as? [String] else {
+                completion([], nil)
+                return
+            }
+            
+            // Then get products for these merchants
+            self.db.collection("products")
+                .whereField("band_id", in: merchantIds)
+                .whereField("active", isEqualTo: true)
+                .getDocuments { snapshot, error in
+                    if let error = error {
+                        completion(nil, error)
+                        return
+                    }
+                    
+                    let products = snapshot?.documents.compactMap { document -> Product? in
+                        try? document.data(as: Product.self)
+                    }
+                    
+                    completion(products, nil)
+                }
+        }
+    }
+    
+    func createProduct(_ product: Product, completion: @escaping (String?, Error?) -> Void) {
+        do {
+            let ref = db.collection("products").document()
+            var newProduct = product
+            newProduct.id = ref.documentID
+            
+            try ref.setData(from: newProduct) { error in
+                if let error = error {
+                    completion(nil, error)
+                } else {
+                    completion(ref.documentID, nil)
+                }
+            }
+        } catch {
+            completion(nil, error)
+        }
+    }
+    
+    // MARK: - Orders
+    
+    func createOrder(_ order: Order, completion: @escaping (String?, Error?) -> Void) {
+        do {
+            let ref = db.collection("orders").document()
+            var newOrder = order
+            newOrder.id = ref.documentID
+            
+            try ref.setData(from: newOrder) { error in
+                if let error = error {
+                    completion(nil, error)
+                } else {
+                    completion(ref.documentID, nil)
+                }
+            }
+        } catch {
+            completion(nil, error)
+        }
+    }
+    
+    func fetchOrders(for userId: String, completion: @escaping ([Order]?, Error?) -> Void) {
+        db.collection("orders")
+            .whereField("user_id", isEqualTo: userId)
+            .order(by: "created_at", descending: true)
+            .getDocuments { snapshot, error in
+                if let error = error {
+                    completion(nil, error)
+                    return
+                }
+                
+                let orders = snapshot?.documents.compactMap { document -> Order? in
+                    try? document.data(as: Order.self)
+                }
+                
+                completion(orders, nil)
+            }
+    }
+    
+    func updateOrderStatus(orderId: String, status: OrderStatus, completion: @escaping (Error?) -> Void) {
+        db.collection("orders").document(orderId).updateData([
+            "status": status.rawValue
+        ]) { error in
+            completion(error)
+        }
+    }
+    
+    // MARK: - Events
+    
+    func fetchNearbyEvents(latitude: Double, longitude: Double, radiusInKm: Double, completion: @escaping ([Event]?, Error?) -> Void) {
+        // In a real app, you'd implement a geospatial query here
+        // For simplicity, we'll just fetch all active events for now
+        db.collection("events")
+            .whereField("active", isEqualTo: true)
+            .getDocuments { snapshot, error in
+                if let error = error {
+                    completion(nil, error)
+                    return
+                }
+                
+                let events = snapshot?.documents.compactMap { document -> Event? in
+                    try? document.data(as: Event.self)
+                }
+                
+                // In a real app, you'd filter events by distance here
+                completion(events, nil)
+            }
+    }
+}
+
+// STEP 11: Create a Location Service for geofencing
+
+// Create a new Swift file called LocationService.swift
+// LocationService.swift
+import Foundation
+import CoreLocation
+
+class LocationService: NSObject, ObservableObject, CLLocationManagerDelegate {
+    private let locationManager = CLLocationManager()
+    
+    @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
+    @Published var currentLocation: CLLocation?
+    @Published var inEventGeofence: Bool = false
+    @Published var currentEvent: Event?
+    @Published var locationError: String?
+    
+    private var events: [Event] = []
+    
+    override init() {
+        super.init()
+        
+        locationManager.delegate = self
+        locationManager.desiredAccuracy = kCLLocationAccuracyBest
+        locationManager.distanceFilter = 10 // Update when user moves 10 meters
+    }
+    
+    func requestPermission() {
+        locationManager.requestWhenInUseAuthorization()
+    }
+    
+    func startUpdatingLocation() {
+        locationManager.startUpdatingLocation()
+    }
+    
+    func stopUpdatingLocation() {
+        locationManager.stopUpdatingLocation()
+    }
+    
+    func setEvents(_ events: [Event]) {
+        self.events = events
+        checkGeofences()
+    }
+    
+    func checkGeofences() {
+        guard let currentLocation = currentLocation else { return }
+        
+        // Check if user is within any event geofence
+        for event in events {
+            let eventLocation = CLLocation(latitude: event.latitude, longitude: event.longitude)
+            let distance = currentLocation.distance(from: eventLocation)
+            
+            if distance <= event.geofenceRadius {
+                inEventGeofence = true
+                currentEvent = event
+                return
+            }
+        }
+        
+        inEventGeofence = false
+        currentEvent = nil
+    }
+    
+    // MARK: - CLLocationManagerDelegate
+    
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        authorizationStatus = manager.authorizationStatus
+        
+        switch manager.authorizationStatus {
+        case .authorizedWhenInUse, .authorizedAlways:
+            startUpdatingLocation()
+        case .denied, .restricted:
+            locationError = "Location permission denied. Please enable location services in Settings."
+            stopUpdatingLocation()
+        case .notDetermined:
+            // Wait for user's response
+            break
+        @unknown default:
+            locationError = "Unknown location authorization status"
+        }
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        if let location = locations.last {
+            currentLocation = location
+            checkGeofences()
+        }
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        locationError = "Location error: \(error.localizedDescription)"
+    }
+}
+
+// STEP 12: Create view models for different features
+
+// Create a new Swift file called ProductViewModel.swift
+// ProductViewModel.swift
+import Foundation
+import Combine
+
+class ProductViewModel: ObservableObject {
+    @Published var products: [Product] = []
+    @Published var isLoading: Bool = false
+    @Published var error: String?
+    
+    private let firestoreService = FirestoreService()
+    
+    func fetchProducts(for eventId: String) {
+        isLoading = true
+        
+        firestoreService.fetchProducts(for: eventId) { [weak self] products, error in
+            DispatchQueue.main.async {
+                self?.isLoading = false
+                
+                if let error = error {
+                    self?.error = error.localizedDescription
+                    return
+                }
+                
+                self?.products = products ?? []
+            }
+        }
+    }
+    
+    func addProduct(_ product: Product, completion: @escaping (Bool) -> Void) {
+        isLoading = true
+        
+        firestoreService.createProduct(product) { [weak self] id, error in
+            DispatchQueue.main.async {
+                self?.isLoading = false
+                
+                if let error = error {
+                    self?.error = error.localizedDescription
+                    completion(false)
+                    return
+                }
+                
+                // Successfully added product
+                if var product = product, let id = id {
+                    product.id = id
+                    self?.products.append(product)
+                }
+                
+                completion(true)
+            }
+        }
+    }
+}
+
+// Create CartViewModel.swift
+// CartViewModel.swift
+import Foundation
+
+class CartViewModel: ObservableObject {
+    @Published var cartItems: [CartItem] = []
+    @Published var total: Double = 0.0
+    
+    func addToCart(product: Product, size: String) {
+        // Check if the item already exists in the cart
+        if let index = cartItems.firstIndex(where: { $0.product.id == product.id && $0.size == size }) {
+            // Update quantity if we have enough inventory
+            if let inventory = product.inventory[size], inventory > cartItems[index].quantity {
+                cartItems[index].quantity += 1
+                calculateTotal()
+            }
+        } else {
+            // Add new item to cart
+            if let inventory = product.inventory[size], inventory > 0 {
+                let item = CartItem(product: product, size: size, quantity: 1)
+                cartItems.append(item)
+                calculateTotal()
+            }
+        }
+    }
+    
+    func removeFromCart(at index: Int) {
+        cartItems.remove(at: index)
+        calculateTotal()
+    }
+    
+    func updateQuantity(at index: Int, quantity: Int) {
+        if index < cartItems.count {
+            let item = cartItems[index]
+            if let inventory = item.product.inventory[item.size], quantity <= inventory && quantity > 0 {
+                cartItems[index].quantity = quantity
+                calculateTotal()
+            }
+        }
+    }
+    
+    func clearCart() {
+        cartItems.removeAll()
+        total = 0.0
+    }
+    
+    private func calculateTotal() {
+        total = cartItems.reduce(0) { $0 + ($1.product.price * Double($1.quantity)) }
+    }
+}
+
+struct CartItem: Identifiable {
+    let id = UUID()
+    let product: Product
+    let size: String
+    var quantity: Int
+}
+
+// STEP 13: Create OrderViewModel.swift
+// OrderViewModel.swift
+import Foundation
+import FirebaseFirestore
+
+class OrderViewModel: ObservableObject {
+    @Published var orders: [Order] = []
+    @Published var isLoading: Bool = false
+    @Published var error: String?
+    
+    private let firestoreService = FirestoreService()
+    
+    func fetchOrders(for userId: String) {
+        isLoading = true
+        
+        firestoreService.fetchOrders(for: userId) { [weak self] orders, error in
+            DispatchQueue.main.async {
+                self?.isLoading = false
+                
+                if let error = error {
+                    self?.error = error.localizedDescription
+                    return
+                }
+                
+                self?.orders = orders ?? []
+            }
+        }
+    }
+    
+    func createOrder(from cartItems: [CartItem], userId: String, bandId: String, total: Double, completion: @escaping (String?) -> Void) {
+        isLoading = true
+        
+        // Convert cart items to order items
+        let orderItems = cartItems.map { cartItem in
+            OrderItem(
+                productId: cartItem.product.id ?? "",
+                size: cartItem.size,
+                qty: cartItem.quantity
+            )
+        }
+        
+        // Generate a QR code (in a real app, this would be more secure)
+        let qrCode = "QR_\(UUID().uuidString)"
+        
+        // Create the order
+        let newOrder = Order(
+            userId: userId,
+            bandId: bandId,
+            items: orderItems,
+            amount: total,
+            status: .pendingPickup,
+            qrCode: qrCode,
+            createdAt: Date()
+        )
+        
+        firestoreService.createOrder(newOrder) { [weak self] orderId, error in
+            DispatchQueue.main.async {
+                self?.isLoading = false
+                
+                if let error = error {
+                    self?.error = error.localizedDescription
+                    completion(nil)
+                    return
+                }
+                
+                completion(orderId)
+            }
+        }
+    }
+    
+    func updateOrderStatus(orderId: String, status: OrderStatus, completion: @escaping (Bool) -> Void) {
+        isLoading = true
+        
+        firestoreService.updateOrderStatus(orderId: orderId, status: status) { [weak self] error in
+            DispatchQueue.main.async {
+                self?.isLoading = false
+                
+                if let error = error {
+                    self?.error = error.localizedDescription
+                    completion(false)
+                    return
+                }
+                
+                // Update the local order status
+                if let index = self?.orders.firstIndex(where: { $0.id == orderId }) {
+                    self?.orders[index].status = status
+                }
+                
+                completion(true)
+            }
+        }
+    }
+}
+
+// STEP 14: Create EventViewModel.swift
+// EventViewModel.swift
+import Foundation
+import CoreLocation
+
+class EventViewModel: ObservableObject {
+    @Published var events: [Event] = []
+    @Published var isLoading: Bool = false
+    @Published var error: String?
+    
+    private let firestoreService = FirestoreService()
+    
+    func fetchNearbyEvents(latitude: Double, longitude: Double) {
+        isLoading = true
+        
+        // Standard search radius in km
+        let searchRadius = 10.0
+        
+        firestoreService.fetchNearbyEvents(
+            latitude: latitude,
+            longitude: longitude,
+            radiusInKm: searchRadius
+        ) { [weak self] events, error in
+            DispatchQueue.main.async {
+                self?.isLoading = false
+                
+                if let error = error {
+                    self?.error = error.localizedDescription
+                    return
+                }
+                
+                self?.events = events ?? []
+            }
+        }
+    }
+}
+
+// STEP 15: Create QR Code Generator & Scanner Service
+
+// Create QRService.swift
+// QRService.swift
+import Foundation
+import UIKit
+import CoreImage
+import AVFoundation
+
+class QRService {
+    // Generate QR code from a string
+    static func generateQRCode(from string: String, size: CGSize = CGSize(width: 250, height: 250)) -> UIImage? {
+        if let data = string.data(using: .ascii),
+           let qrFilter = CIFilter(name: "CIQRCodeGenerator") {
+            
+            qrFilter.setValue(data, forKey: "inputMessage")
+            qrFilter.setValue("H", forKey: "inputCorrectionLevel") // Highest correction level
+            
+            if let qrImage = qrFilter.outputImage {
+                // Scale the image to the requested size
+                let transform = CGAffineTransform(scaleX: size.width / qrImage.extent.width, y: size.height / qrImage.extent.height)
+                let scaledQrImage = qrImage.transformed(by: transform)
+                
+                let context = CIContext()
+                if let cgImage = context.createCGImage(scaledQrImage, from: scaledQrImage.extent) {
+                    return UIImage(cgImage: cgImage)
+                }
+            }
+        }
+        
+        return nil
+    }
+}
+
+// STEP 16: QR Code Scanner View
+
+// QRScannerView.swift
+import SwiftUI
+import AVFoundation
+
+struct QRScannerView: UIViewRepresentable {
+    class Coordinator: NSObject, AVCaptureMetadataOutputObjectsDelegate {
+        var parent: QRScannerView
+        var codeFound = false
+        
+        init(_ parent: QRScannerView) {
+            self.parent = parent
+        }
+        
+        func metadataOutput(_ output: AVCaptureMetadataOutput, didOutput metadataObjects: [AVMetadataObject], from connection: AVCaptureConnection) {
+            if !codeFound, let metadataObject = metadataObjects.first as? AVMetadataMachineReadableCodeObject,
+               let code = metadataObject.stringValue {
+                // Only process the first QR code found
+                codeFound = true
+                
+                // Provide haptic feedback
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.success)
+                
+                // Notify parent of the scanned code
+                DispatchQueue.main.async {
+                    self.parent.onCodeScanned(code)
+                    
+                    // Reset after a short delay to allow for new scans
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        self.codeFound = false
+                    }
+                }
+            }
+        }
+    }
+    
+    let onCodeScanned: (String) -> Void
+    
+    func makeCoordinator() -> Coordinator {
+        return Coordinator(self)
+    }
+    
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.backgroundColor = .black
+        
+        // Check camera permission
+        let captureSession = AVCaptureSession()
+        
+        guard let videoCaptureDevice = AVCaptureDevice.default(for: .video) else {
+            return view
+        }
+        
+        let videoInput: AVCaptureDeviceInput
+        
+        do {
+            videoInput = try AVCaptureDeviceInput(device: videoCaptureDevice)
+        } catch {
+            return view
+        }
+        
+        if captureSession.canAddInput(videoInput) {
+            captureSession.addInput(videoInput)
+        } else {
+            return view
+        }
+        
+        let metadataOutput = AVCaptureMetadataOutput()
+        
+        if captureSession.canAddOutput(metadataOutput) {
+            captureSession.addOutput(metadataOutput)
+            
+            metadataOutput.setMetadataObjectsDelegate(context.coordinator, queue: DispatchQueue.main)
+            metadataOutput.metadataObjectTypes = [.qr]
+        } else {
+            return view
+        }
+        
+        // Add preview layer
+        let previewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
+        previewLayer.frame = view.layer.bounds
+        previewLayer.videoGravity = .resizeAspectFill
+        view.layer.addSublayer(previewLayer)
+        
+        // Start capture session
+        DispatchQueue.global(qos: .background).async {
+            captureSession.startRunning()
+        }
+        
+        return view
+    }
+    
+    func updateUIView(_ uiView: UIView, context: Context) {
+        // Update if needed
+    }
+}
+
+// STEP 17: Create Stripe Payment Integration
+
+// PaymentService.swift
+import Foundation
+import UIKit
+import SwiftUI
+
+// Note: In a real app, you would implement proper Stripe SDK integration
+// For the MVP, we'll create a placeholder service
+class PaymentService {
+    enum PaymentError: Error {
+        case paymentFailed
+        case userCancelled
+        case unknown
+    }
+    
+    static func processPayment(amount: Double, completion: @escaping (Result<String, PaymentError>) -> Void) {
+        // In a real app, you would integrate the Stripe SDK here
+        // For now, just simulate a successful payment
+        
+        // Simulate network delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            // Generate a mock transaction ID
+            let transactionId = "TRANS_\(UUID().uuidString)"
+            completion(.success(transactionId))
+        }
+    }
+}
+
+// In a real app, you would create a Stripe payment view like this:
+struct StripePaymentView: UIViewControllerRepresentable {
+    let amount: Double
+    let onCompletion: (Result<String, PaymentService.PaymentError>) -> Void
+    
+    func makeUIViewController(context: Context) -> UIViewController {
+        // In a real app, you would use the Stripe SDK's payment UI
+        let viewController = UIViewController()
+        viewController.view.backgroundColor = .white
+        
+        let label = UILabel()
+        label.text = "Processing payment for $\(String(format: "%.2f", amount))..."
+        label.textAlignment = .center
+        label.translatesAutoresizingMaskIntoConstraints = false
+        
+        viewController.view.addSubview(label)
+        
+        NSLayoutConstraint.activate([
+            label.centerXAnchor.constraint(equalTo: viewController.view.centerXAnchor),
+            label.centerYAnchor.constraint(equalTo: viewController.view.centerYAnchor)
+        ])
+        
+        // Simulate payment processing
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            // Generate a mock transaction ID
+            let transactionId = "TRANS_\(UUID().uuidString)"
+            onCompletion(.success(transactionId))
+            viewController.dismiss(animated: true)
+        }
+        
+        return viewController
+    }
+    
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
+        // Update if needed
+    }
+}
+
+// STEP 18: Extended Fan Views for browsing merchandise
+
+// ProductCardView.swift
+import SwiftUI
+
+struct ProductCardView: View {
+    let product: Product
+    @State private var selectedSize: String? = nil
+    @ObservedObject var cartViewModel: CartViewModel
+    
+    var body: some View {
+        VStack(alignment: .leading) {
+            // Product image
+            if let url = URL(string: product.imageUrl) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        ZStack {
+                            Rectangle()
+                                .fill(Color.gray.opacity(0.2))
+                            ProgressView()
+                        }
+                        .aspectRatio(1, contentMode: .fit)
+                        .cornerRadius(8)
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .cornerRadius(8)
+                    case .failure:
+                        ZStack {
+                            Rectangle()
+                                .fill(Color.gray.opacity(0.2))
+                            Image(systemName: "photo")
+                                .foregroundColor(.gray)
+                        }
+                        .aspectRatio(1, contentMode: .fit)
+                        .cornerRadius(8)
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
+            } else {
+                ZStack {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.2))
+                    Image(systemName: "photo")
+                        .foregroundColor(.gray)
+                }
+                .aspectRatio(1, contentMode: .fit)
+                .cornerRadius(8)
+            }
+            
+            // Product details
+            Text(product.title)
+                .font(.headline)
+                .lineLimit(1)
+            
+            Text("$\(String(format: "%.2f", product.price))")
+                .font(.subheadline)
+                .foregroundColor(.purple)
+            
+            // Size selection
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack {
+                    ForEach(product.sizes, id: \.self) { size in
+                        Button(action: {
+                            selectedSize = size
+                        }) {
+                            Text(size)
+                                .font(.caption)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(selectedSize == size ? Color.purple : Color.gray.opacity(0.2))
+                                .foregroundColor(selectedSize == size ? .white : .black)
+                                .cornerRadius(20)
+                        }
+                        .disabled(product.inventory[size] ?? 0 <= 0)
+                        .opacity(product.inventory[size] ?? 0 <= 0 ? 0.3 : 1.0)
+                    }
+                }
+            }
+            .padding(.vertical, 5)
+            
+            // Add to cart button
+            Button(action: {
+                if let size = selectedSize {
+                    cartViewModel.addToCart(product: product, size: size)
+                }
+            }) {
+                Text("Add to Cart")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(selectedSize != nil ? Color.purple : Color.gray)
+                    .cornerRadius(8)
+            }
+            .disabled(selectedSize == nil)
+        }
+        .padding()
+        .background(Color.white)
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
+    }
+}
+
+// CartView.swift
+import SwiftUI
+
+struct CartView: View {
+    @ObservedObject var cartViewModel: CartViewModel
+    @ObservedObject var orderViewModel: OrderViewModel
+    @EnvironmentObject var authViewModel: AuthViewModel
+    @State private var showingPaymentSheet = false
+    @State private var showingOrderConfirmation = false
+    @State private var newOrderId: String?
+    @Environment(\.presentationMode) var presentationMode
+    
+    var body: some View {
+        NavigationView {
+            VStack {
+                if cartViewModel.cartItems.isEmpty {
+                    VStack(spacing: 20) {
+                        Image(systemName: "cart")
+                            .font(.system(size: 60))
+                            .foregroundColor(.gray)
+                        Text("Your cart is empty")
+                            .font(.headline)
+                        Text("Add items to your cart to see them here")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+                    .padding()
+                    Spacer()
+                } else {
+                    List {
+                        ForEach(Array(cartViewModel.cartItems.enumerated()), id: \.element.id) { index, item in
+                            HStack {
+                                VStack(alignment: .leading) {
+                                    Text(item.product.title)
+                                        .font(.headline)
+                                    Text("Size: \(item.size)")
+                                        .font(.subheadline)
+                                        .foregroundColor(.gray)
+                                }
+                                
+                                Spacer()
+                                
+                                VStack(alignment: .trailing) {
+                                    Text("$\(String(format: "%.2f", item.product.price * Double(item.quantity)))")
+                                        .fontWeight(.semibold)
+                                    
+                                    Stepper("\(item.quantity)", value: Binding(
+                                        get: { item.quantity },
+                                        set: { cartViewModel.updateQuantity(at: index, quantity: $0) }
+                                    ), in: 1...10)
+                                    .labelsHidden()
+                                    .frame(width: 100)
+                                }
+                            }
+                            .padding(.vertical, 5)
+                        }
+                        .onDelete { indexSet in
+                            for index in indexSet {
+                                cartViewModel.removeFromCart(at: index)
+                            }
+                        }
+                    }
+                    
+                    VStack(spacing: 15) {
+                        HStack {
+                            Text("Total:")
+                                .font(.headline)
+                            Spacer()
+                            Text("$\(String(format: "%.2f", cartViewModel.total))")
+                                .font(.title3)
+                                .fontWeight(.bold)
+                        }
+                        
+                        Button(action: {
+                            showingPaymentSheet = true
+                        }) {
+                            Text("Checkout")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.purple)
+                                .cornerRadius(10)
+                        }
+                    }
+                    .padding()
+                    .background(Color(.systemBackground))
+                }
+            }
+            .navigationTitle("Your Cart")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    if !cartViewModel.cartItems.isEmpty {
+                        Button("Clear") {
+                            cartViewModel.clearCart()
+                        }
+                    }
+                }
+            }
+            .sheet(isPresented: $showingPaymentSheet) {
+                // In a real app, you would integrate with Stripe SDK here
+                VStack {
+                    Text("Payment Processing")
+                        .font(.title)
+                        .padding()
+                    
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .padding()
+                    
+                    Text("This is a simulated payment flow")
+                        .foregroundColor(.gray)
+                        .padding()
+                    
+                    Button("Complete Payment") {
+                        if let user = authViewModel.user, let firstItem = cartViewModel.cartItems.first {
+                            // Use the first item's band ID for the order
+                            let bandId = firstItem.product.bandId
+                            
+                            // Create the order
+                            orderViewModel.createOrder(
+                                from: cartViewModel.cartItems,
+                                userId: user.uid,
+                                bandId: bandId,
+                                total: cartViewModel.total
+                            ) { orderId in
+                                if let orderId = orderId {
+                                    newOrderId = orderId
+                                    showingOrderConfirmation = true
+                                    showingPaymentSheet = false
+                                    cartViewModel.clearCart()
+                                }
+                            }
+                        }
+                    }
+                    .padding()
+                    .background(Color.purple)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                    .padding()
+                    
+                    Button("Cancel") {
+                        showingPaymentSheet = false
+                    }
+                    .padding()
+                }
+                .presentationDetents([.medium])
+            }
+            .sheet(isPresented: $showingOrderConfirmation) {
+                OrderConfirmationView(orderId: newOrderId ?? "")
+            }
+        }
+    }
+}
+
+// OrderConfirmationView.swift
+import SwiftUI
+
+struct OrderConfirmationView: View {
+    let orderId: String
+    @Environment(\.presentationMode) var presentationMode
+    
+    var body: some View {
+        VStack(spacing: 25) {
+            Image(systemName: "checkmark.circle.fill")
+                .resizable()
+                .frame(width: 100, height: 100)
+                .foregroundColor(.green)
+                .padding(.top, 50)
+            
+            Text("Order Confirmed!")
+                .font(.largeTitle)
+                .fontWeight(.bold)
+            
+            Text("Your order has been placed successfully.")
+                .font(.headline)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+            
+            if !orderId.isEmpty {
+                VStack(alignment: .center, spacing: 5) {
+                    Text("Order ID:")
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                    
+                    Text(orderId)
+                        .font(.body)
+                        .padding()
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(8)
+                }
+                .padding()
+            }
+            
+            // QR Code for pickup
+            VStack {
+                Text("Show this QR code at the pickup booth")
+                    .font(.headline)
+                
+                if let qrImage = QRService.generateQRCode(from: orderId) {
+                    Image(uiImage: qrImage)
+                        .interpolation(.none)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 200, height: 200)
+                        .padding()
+                } else {
+                    Text("Could not generate QR code")
+                        .foregroundColor(.red)
+                }
+            }
+            .padding()
+            
+            Button("Done") {
+                presentationMode.wrappedValue.dismiss()
+            }
+            .font(.headline)
+            .foregroundColor(.white)
+            .frame(width: 200)
+            .padding()
+            .background(Color.purple)
+            .cornerRadius(10)
+            .padding(.bottom, 40)
+        }
+        .padding()
+    }
+}
+
+// STEP 19: Create more detailed view for Fan Dashboard
+
+// Enhanced FanDashboardView.swift
+import SwiftUI
+import CoreLocation
+
+struct FanDashboardView: View {
+    @StateObject private var locationService = LocationService()
+    @StateObject private var eventViewModel = EventViewModel()
+    @StateObject private var productViewModel = ProductViewModel()
+    @StateObject private var cartViewModel = CartViewModel()
+    @StateObject private var orderViewModel = OrderViewModel()
+    @EnvironmentObject var authViewModel: AuthViewModel
+    
+    @State private var showingCart = false
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                VStack {
+                    if locationService.inEventGeofence, let event = locationService.currentEvent {
+                        // Inside an event geofence
+                        VStack {
+                            Text("You're at")
+                                .font(.subheadline)
+                                .foregroundColor(.gray)
+                            
+                            Text(event.name)
+                                .font(.title)
+                                .fontWeight(.bold)
+                                .padding(.bottom, 5)
+                            
+                            Text(event.venueName)
+                                .font(.headline)
+                        }
+                        .padding()
+                        .background(Color.purple.opacity(0.1))
+                        .cornerRadius(15)
+                        .padding(.horizontal)
+                        
+                        // Products grid
+                        ScrollView {
+                            LazyVGrid(columns: [
+                                GridItem(.flexible(), spacing: 16),
+                                GridItem(.flexible(), spacing: 16)
+                            ], spacing: 16) {
+                                ForEach(productViewModel.products) { product in
+                                    ProductCardView(product: product, cartViewModel: cartViewModel)
+                                }
+                            }
+                            .padding()
+                        }
+                    } else if eventViewModel.events.isEmpty {
+                        // No nearby events
+                        VStack(spacing: 20) {
+                            Image(systemName: "mappin.and.ellipse")
+                                .font(.system(size: 60))
+                                .foregroundColor(.gray)
+                            
+                            Text("No events nearby")
+                                .font(.title3)
+                                .fontWeight(.semibold)
+                            
+                            Text("Visit a venue to see available merchandise")
+                                .multilineTextAlignment(.center)
+                                .foregroundColor(.gray)
+                                .padding(.horizontal)
+                            
+                            Button(action: {
+                                // Request location and refresh
+                                locationService.requestPermission()
+                                if let location = locationService.currentLocation {
+                                    eventViewModel.fetchNearbyEvents(
+                                        latitude: location.coordinate.latitude,
+                                        longitude: location.coordinate.longitude
+                                    )
+                                }
+                            }) {
+                                Text("Check for Events")
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.white)
+                                    .padding()
+                                    .background(Color.purple)
+                                    .cornerRadius(10)
+                            }
+                            .padding()
+                        }
+                        .padding()
+                    } else {
+                        // List nearby events
+                        Text("Nearby Events")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal)
+                            .padding(.top)
+                        
+                        List(eventViewModel.events) { event in
+                            Button(action: {
+                                // Simulate entering this event's geofence
+                                locationService.inEventGeofence = true
+                                locationService.currentEvent = event
+                                
+                                // Load products for this event
+                                if let eventId = event.id {
+                                    productViewModel.fetchProducts(for: eventId)
+                                }
+                            }) {
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text(event.name)
+                                        .font(.headline)
+                                    
+                                    Text(event.venueName)
+                                        .font(.subheadline)
+                                        .foregroundColor(.gray)
+                                    
+                                    // Format date
+                                    let formatter = DateFormatter()
+                                    formatter.dateStyle = .medium
+                                    formatter.timeStyle = .short
+                                    
+                                    Text(formatter.string(from: event.startDate))
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.vertical, 5)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                }
+                
+                // Loading overlay
+                if productViewModel.isLoading || eventViewModel.isLoading {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .progressViewStyle(CircularProgressViewStyle(tint: .purple))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.black.opacity(0.2))
+                }
+            }
+            .navigationTitle("MerchPit")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: {
+                        showingCart = true
+                    }) {
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: "cart")
+                                .font(.system(size: 20))
+                            
+                            if !cartViewModel.cartItems.isEmpty {
+                                Text("\(cartViewModel.cartItems.count)")
+                                    .font(.caption2)
+                                    .padding(5)
+                                    .background(Color.red)
+                                    .clipShape(Circle())
+                                    .foregroundColor(.white)
+                                    .offset(x: 10, y: -10)
+                            }
+                        }
+                    }
+                }
+            }
+            .sheet(isPresented: $showingCart) {
+                CartView(cartViewModel: cartViewModel, orderViewModel: orderViewModel)
+            }
+            .onAppear {
+                // Request location permission
+                locationService.requestPermission()
+                
+                // Start location updates
+                locationService.startUpdatingLocation()
+                
+                // Load events when location available
+                if let location = locationService.currentLocation {
+                    eventViewModel.fetchNearbyEvents(
+                        latitude: location.coordinate.latitude,
+                        longitude: location.coordinate.longitude
+                    )
+                }
+                
+                // Load user's orders
+                if let user = authViewModel.user {
+                    orderViewModel.fetchOrders(for: user.uid)
+                }
+            }
+            .onDisappear {
+                locationService.stopUpdatingLocation()
+            }
+        }
+    }
+}
+
+// STEP 20: Enhanced Order History View
+
+struct OrderHistoryView: View {
+    @StateObject private var orderViewModel = OrderViewModel()
+    @EnvironmentObject var authViewModel: AuthViewModel
+    @State private var selectedOrder: Order? = nil
+    
+    var body: some View {
+        NavigationView {
+            Group {
+                if orderViewModel.isLoading {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .purple))
+                        .scaleEffect(1.5)
+                } else if orderViewModel.orders.isEmpty {
+                    VStack(spacing: 20) {
+                        Image(systemName: "bag")
+                            .font(.system(size: 60))
+                            .foregroundColor(.gray)
+                        
+                        Text("No Orders Yet")
+                            .font(.headline)
+                        
+                        Text("Your order history will appear here")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+                    .padding()
+                } else {
+                    List {
+                        ForEach(orderViewModel.orders) { order in
+                            Button(action: {
+                                selectedOrder = order
+                            }) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Text("Order #\(order.id?.suffix(6) ?? "")")
+                                            .font(.headline)
+                                        
+                                        Spacer()
+                                        
+                                        Text("$\(String(format: "%.2f", order.amount))")
+                                            .fontWeight(.semibold)
+                                    }
+                                    
+                                    HStack {
+                                        // Order date
+                                        let formatter = DateFormatter()
+                                        formatter.dateStyle = .medium
+                                        formatter.timeStyle = .short
+                                        Text(formatter.string(from: order.createdAt))
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                        
+                                        Spacer()
+                                        
+                                        // Order status
+                                        Text(order.status.rawValue.capitalized.replacingOccurrences(of: "_", with: " "))
+                                            .font(.caption)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(
+                                                order.status == .pendingPickup ? Color.orange.opacity(0.2) :
+                                                order.status == .pickedUp ? Color.green.opacity(0.2) :
+                                                Color.red.opacity(0.2)
+                                            )
+                                            .foregroundColor(
+                                                order.status == .pendingPickup ? Color.orange :
+                                                order.status == .pickedUp ? Color.green :
+                                                Color.red
+                                            )
+                                            .cornerRadius(4)
+                                    }
+                                    
+                                    Text("\(order.items.count) item\(order.items.count > 1 ? "s" : "")")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.vertical, 5)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Order History")
+            .sheet(item: $selectedOrder) { order in
+                OrderDetailView(order: order)
+            }
+            .onAppear {
+                if let user = authViewModel.user {
+                    orderViewModel.fetchOrders(for: user.uid)
+                }
+            }
+            .refreshable {
+                if let user = authViewModel.user {
+                    orderViewModel.fetchOrders(for: user.uid)
+                }
+            }
+        }
+    }
+}
+
+// OrderDetailView.swift
+import SwiftUI
+
+struct OrderDetailView: View {
+    let order: Order
+    @Environment(\.presentationMode) var presentationMode
+    @State private var showingQRCode = false
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    // Order summary
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Order Summary")
+                            .font(.headline)
+                        
+                        HStack {
+                            Text("Order #:")
+                            Spacer()
+                            Text(order.id?.suffix(6) ?? "")
+                                .fontWeight(.semibold)
+                        }
+                        
+                        HStack {
+                            Text("Date:")
+                            Spacer()
+                            // Format date
+                            let formatter = DateFormatter()
+                            formatter.dateStyle = .medium
+                            formatter.timeStyle = .short
+                            Text(formatter.string(from: order.createdAt))
+                        }
+                        
+                        HStack {
+                            Text("Status:")
+                            Spacer()
+                            Text(order.status.rawValue.capitalized.replacingOccurrences(of: "_", with: " "))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(
+                                    order.status == .pendingPickup ? Color.orange.opacity(0.2) :
+                                    order.status == .pickedUp ? Color.green.opacity(0.2) :
+                                    Color.red.opacity(0.2)
+                                )
+                                .foregroundColor(
+                                    order.status == .pendingPickup ? Color.orange :
+                                    order.status == .pickedUp ? Color.green :
+                                    Color.red
+                                )
+                                .cornerRadius(4)
+                        }
+                        
+                        HStack {
+                            Text("Total:")
+                            Spacer()
+                            Text("$\(String(format: "%.2f", order.amount))")
+                                .fontWeight(.bold)
+                        }
+                    }
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(10)
+                    .padding(.horizontal)
+                    
+                    // Items list
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Items")
+                            .font(.headline)
+                            .padding(.horizontal)
+                        
+                        ForEach(order.items, id: \.productId) { item in
+                            HStack {
+                                // In a real app, you would fetch the product details
+                                // For now, we'll just show the ID
+                                VStack(alignment: .leading) {
+                                    Text("Product ID: \(item.productId.suffix(6))")
+                                        .font(.subheadline)
+                                    Text("Size: \(item.size)")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
+                                
+                                Spacer()
+                                
+                                Text("Qty: \(item.qty)")
+                                    .font(.subheadline)
+                            }
+                            .padding()
+                            .background(Color.white)
+                            .cornerRadius(8)
+                            .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+                            .padding(.horizontal)
+                        }
+                    }
+                    
+                    // QR Code for pickup (if order is pending)
+                    if order.status == .pendingPickup {
+                        VStack(alignment: .center) {
+                            Button(action: {
+                                showingQRCode = true
+                            }) {
+                                HStack {
+                                    Image(systemName: "qrcode")
+                                    Text("Show QR Code for Pickup")
+                                }
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.purple)
+                                .cornerRadius(10)
+                                .padding(.horizontal)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top)
+                    }
+                }
+                .padding(.vertical)
+            }
+            .navigationTitle("Order Details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Close") {
+                        presentationMode.wrappedValue.dismiss()
+                    }
+                }
+            }
+            .sheet(isPresented: $showingQRCode) {
+                VStack(spacing: 20) {
+                    Text("Show this QR code at pickup")
+                        .font(.headline)
+                        .padding(.top, 30)
+                    
+                    if let qrImage = QRService.generateQRCode(from: order.qrCode) {
+                        Image(uiImage: qrImage)
+                            .interpolation(.none)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 250, height: 250)
+                    }
+                    
+                    VStack(spacing: 5) {
+                        Text("Order #\(order.id?.suffix(6) ?? "")")
+                            .font(.title3)
+                            .fontWeight(.semibold)
+                        
+                        Text("\(order.items.count) item\(order.items.count > 1 ? "s" : "")")
+                            .foregroundColor(.gray)
+                    }
+                    .padding()
+                    
+                    Button("Close") {
+                        showingQRCode = false
+                    }
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 40)
+                    .padding(.vertical, 12)
+                    .background(Color.purple)
+                    .cornerRadius(10)
+                    .padding(.bottom, 30)
+                }
+            }
+        }
+    }
+}
+
+// STEP 21: Enhanced Merchant Views
+
+// Enhanced MerchantDashboardView.swift
+import SwiftUI
+import PhotosUI
+
+struct MerchantDashboardView: View {
+    @StateObject private var productViewModel = ProductViewModel()
+    @EnvironmentObject var authViewModel: AuthViewModel
+    @State private var showingAddProduct = false
+    @State private var showingProductDetail: Product? = nil
+    @State private var isStoreActive = true
+    
+    var body: some View {
+        NavigationView {
+            VStack {
+                // Store status toggle
+                HStack {
+                    Text("Store Status:")
+                        .font(.headline)
+                    
+                    Spacer()
+                    
+                    Toggle("", isOn: $isStoreActive)
+                        .labelsHidden()
+                        .toggleStyle(SwitchToggleStyle(tint: .purple))
+                }
+                .padding()
+                .background(Color(.systemGray6))
+                .cornerRadius(10)
+                .padding(.horizontal)
+                
+                if productViewModel.products.isEmpty {
+                    // Empty state
+                    VStack(spacing: 20) {
+                        Image(systemName: "tag")
+                            .font(.system(size: 60))
+                            .foregroundColor(.gray)
+                        
+                        Text("No Products Yet")
+                            .font(.title3)
+                            .fontWeight(.semibold)
+                        
+                        Text("Add your first product to get started")
+                            .multilineTextAlignment(.center)
+                            .foregroundColor(.gray)
+                            .padding(.horizontal)
+                        
+                        Button(action: {
+                            showingAddProduct = true
+                        }) {
+                            Text("+ Add Product")
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                                .padding()
+                                .background(Color.purple)
+                                .cornerRadius(10)
+                        }
+                        .padding()
+                    }
+                    .padding(.top, 50)
+                } else {
+                    // Product list
+                    List {
+                        ForEach(productViewModel.products) { product in
+                            Button(action: {
+                                showingProductDetail = product
+                            }) {
+                                HStack {
+                                    // Product image
+                                    if let url = URL(string: product.imageUrl) {
+                                        AsyncImage(url: url) { phase in
+                                            switch phase {
+                                            case .empty:
+                                                Rectangle()
+                                                    .fill(Color.gray.opacity(0.2))
+                                                    .frame(width: 60, height: 60)
+                                                    .cornerRadius(8)
+                                            case .success(let image):
+                                                image
+                                                    .resizable()
+                                                    .aspectRatio(contentMode: .fill)
+                                                    .frame(width: 60, height: 60)
+                                                    .cornerRadius(8)
+                                            case .failure:
+                                                Rectangle()
+                                                    .fill(Color.gray.opacity(0.2))
+                                                    .frame(width: 60, height: 60)
+                                                    .cornerRadius(8)
+                                                    .overlay(
+                                                        Image(systemName: "photo")
+                                                            .foregroundColor(.gray)
+                                                    )
+                                            @unknown default:
+                                                EmptyView()
+                                            }
+                                        }
+                                    } else {
+                                        Rectangle()
+                                            .fill(Color.gray.opacity(0.2))
+                                            .frame(width: 60, height: 60)
+                                            .cornerRadius(8)
+                                            .overlay(
+                                                Image(systemName: "photo")
+                                                    .foregroundColor(.gray)
+                                            )
+                                    }
+                                    
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text(product.title)
+                                            .font(.headline)
+                                        
+                                        Text("$\(String(format: "%.2f", product.price))")
+                                            .font(.subheadline)
+                                            .foregroundColor(.purple)
+                                        
+                                        // Show available sizes
+                                        Text(product.sizes.joined(separator: ", "))
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                    }
+                                    .padding(.leading, 5)
+                                    
+                                    Spacer()
+                                    
+                                    // Status indicator
+                                    Circle()
+                                        .fill(product.active ? Color.green : Color.gray)
+                                        .frame(width: 12, height: 12)
+                                }
+                                .padding(.vertical, 5)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Your Store")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: {
+                        showingAddProduct = true
+                    }) {
+                        Image(systemName: "plus")
+                    }
+                }
+            }
+            .sheet(isPresented: $showingAddProduct) {
+                AddProductView()
+            }
+            .sheet(item: $showingProductDetail) { product in
+                ProductDetailView(product: product)
+            }
+            .onAppear {
+                // In a real app, you would fetch products for the current merchant
+                // For now, we'll just use a placeholder
+                if let user = authViewModel.user {
+                    // Mock band ID
+                    let mockBandId = "band_\(user.uid)"
+                    
+                    // Fetch products for this band
+                    // This would be implemented differently in a real app
+                }
+            }
+        }
+    }
+}
+
+// AddProductView.swift
+import SwiftUI
+import PhotosUI
+
+struct AddProductView: View {
+    @StateObject private var productViewModel = ProductViewModel()
+    @Environment(\.presentationMode) var presentationMode
+    
+    @State private var title = ""
+    @State private var price = ""
+    @State private var selectedSizes: [String] = []
+    @State private var inventoryValues: [String: String] = [:]
+    @State private var selectedImage: UIImage?
+    @State private var isImagePickerPresented = false
+    
+    let availableSizes = ["XS", "S", "M", "L", "XL", "XXL"]
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("Product Information")) {
+                    TextField("Product Title", text: $title)
+                    
+                    TextField("Price", text: $price)
+                        .keyboardType(.decimalPad)
+                }
+                
+                Section(header: Text("Product Image")) {
+                    HStack {
+                        Spacer()
+                        
+                        if let selectedImage = selectedImage {
+                            Image(uiImage: selectedImage)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(height: 200)
+                                .cornerRadius(10)
+                        } else {
+                            ZStack {
+                                Rectangle()
+                                    .fill(Color.gray.opacity(0.2))
+                                    .frame(height: 200)
+                                    .cornerRadius(10)
+                                
+                                VStack {
+                                    Image(systemName: "photo")
+                                        .font(.system(size: 30))
+                                        .foregroundColor(.gray)
+                                    
+                                    Text("Tap to select image")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                        .padding(.top, 5)
+                                }
+                            }
+                        }
+                        
+                        Spacer()
+                    }
+                    .onTapGesture {
+                        isImagePickerPresented = true
+                    }
+                }
+                
+                Section(header: Text("Available Sizes")) {
+                    ForEach(availableSizes, id: \.self) { size in
+                        HStack {
+                            Button(action: {
+                                if selectedSizes.contains(size) {
+                                    selectedSizes.removeAll { $0 == size }
+                                    inventoryValues.removeValue(forKey: size)
+                                } else {
+                                    selectedSizes.append(size)
+                                    inventoryValues[size] = "0"
+                                }
+                            }) {
+                                HStack {
+                                    Text(size)
+                                    Spacer()
+                                    if selectedSizes.contains(size) {
+                                        Image(systemName: "checkmark")
+                                            .foregroundColor(.purple)
+                                    }
+                                }
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                }
+                
+                if !selectedSizes.isEmpty {
+                    Section(header: Text("Inventory")) {
+                        ForEach(selectedSizes, id: \.self) { size in
+                            HStack {
+                                Text(size)
+                                
+                                Spacer()
+                                
+                                TextField("Quantity", text: Binding(
+                                    get: { inventoryValues[size] ?? "0" },
+                                    set: { inventoryValues[size] = $0 }
+                                ))
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 80)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Add Product")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        presentationMode.wrappedValue.dismiss()
+                    }
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        // In a real app, you would upload the image to Firebase Storage
+                        // and get the download URL
+                        
+                        // For now, we'll just use a placeholder URL
+                        let mockImageUrl = "https://example.com/image.jpg"
+                        
+                        // Convert inventory values to integers
+                        var inventory: [String: Int] = [:]
+                        for (size, value) in inventoryValues {
+                            inventory[size] = Int(value) ?? 0
+                        }
+                        
+                        // Create a new product
+                        let newProduct = Product(
+                            bandId: "mock_band_id", // In a real app, you would get this from the user
+                            title: title,
+                            price: Double(price) ?? 0.0,
+                            sizes: selectedSizes,
+                            inventory: inventory,
+                            imageUrl: mockImageUrl,
+                            active: true
+                        )
+                        
+                        productViewModel.addProduct(newProduct) { success in
+                            if success {
+                                presentationMode.wrappedValue.dismiss()
+                            }
+                        }
+                    }
+                    .disabled(title.isEmpty || price.isEmpty || selectedSizes.isEmpty || selectedImage == nil)
+                }
+            }
+            .sheet(isPresented: $isImagePickerPresented) {
+                // In a real app, you would use PHPickerViewController
+                // For simplicity, we'll use a placeholder
+                VStack {
+                    Text("Image Picker Placeholder")
+                        .font(.headline)
+                        .padding()
+                    
+                    Button("Select Image") {
+                        // Simulate selecting an image
+                        selectedImage = UIImage(systemName: "photo")
+                        isImagePickerPresented = false
+                    }
+                    .padding()
+                    
+                    Button("Cancel") {
+                        isImagePickerPresented = false
+                    }
+                    .padding()
+                }
+            }
+        }
+    }
+}
+
+// ProductDetailView.swift (for merchants)
+import SwiftUI
+
+struct ProductDetailView: View {
+    let product: Product
+    @Environment(\.presentationMode) var presentationMode
+    @State private var isEditing = false
+    @State private var inventory: [String: String] = [:]
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("Product Information")) {
+                    if let url = URL(string: product.imageUrl) {
+                        HStack {
+                            Spacer()
+                            
+                            AsyncImage(url: url) { phase in
+                                switch phase {
+                                case .empty:
+                                    Rectangle()
+                                        .fill(Color.gray.opacity(0.2))
+                                        .frame(height: 200)
+                                        .cornerRadius(10)
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(height: 200)
+                                        .cornerRadius(10)
+                                case .failure:
+                                    Rectangle()
+                                        .fill(Color.gray.opacity(0.2))
+                                        .frame(height: 200)
+                                        .cornerRadius(10)
+                                        .overlay(
+                                            Image(systemName: "photo")
+                                                .foregroundColor(.gray)
+                                        )
+                                @unknown default:
+                                    EmptyView()
+                                }
+                            }
+                            
+                            Spacer()
+                        }
+                    }
+                    
+                    HStack {
+                        Text("Title")
+                        Spacer()
+                        Text(product.title)
+                            .foregroundColor(.gray)
+                    }
+                    
+                    HStack {
+                        Text("Price")
+                        Spacer()
+                        Text("$\(String(format: "%.2f", product.price))")
+                            .foregroundColor(.gray)
+                    }
+                    
+                    HStack {
+                        Text("Status")
+                        Spacer()
+                        Text(product.active ? "Active" : "Inactive")
+                            .foregroundColor(product.active ? .green : .gray)
+                    }
+                }
+                
+                Section(header: Text("Inventory")) {
+                    ForEach(product.sizes, id: \.self) { size in
+                        HStack {
+                            Text(size)
+                            
+                            Spacer()
+                            
+                            if isEditing {
+                                TextField("Quantity", text: Binding(
+                                    get: { inventory[size] ?? "\(product.inventory[size] ?? 0)" },
+                                    set: { inventory[size] = $0 }
+                                ))
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 80)
+                            } else {
+                                Text("\(product.inventory[size] ?? 0)")
+                                    .foregroundColor(.gray)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Product Details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Close") {
+                        presentationMode.wrappedValue.dismiss()
+                    }
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    if isEditing {
+                        Button("Save") {
+                            // In a real app, you would update the product in Firestore
+                            isEditing = false
+                        }
+                    } else {
+                        Button("Edit") {
+                            isEditing = true
+                            
+                            // Initialize inventory with current values
+                            for size in product.sizes {
+                                inventory[size] = "\(product.inventory[size] ?? 0)"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// STEP 22: Enhanced Order Scanner View for Merchants
+
+// EnhancedOrderScannerView.swift
+import SwiftUI
+import AVFoundation
+
+struct OrderScannerView: View {
+    @StateObject private var orderViewModel = OrderViewModel()
+    @State private var isScanning = false
+    @State private var scannedCode: String?
+    @State private var showingOrderDetail = false
+    @State private var scannedOrder: Order?
+    
+    var body: some View {
+        NavigationView {
+            VStack {
+                if isScanning {
+                    ZStack {
+                        QRScannerView(onCodeScanned: { code in
+                            scannedCode = code
+                            isScanning = false
+                            
+                            // In a real app, you would fetch the order from Firestore
+                            // based on the QR code
+                            // For now, we'll simulate finding an order
+                            
+                            // Simulate finding an order
+                            let mockOrder = Order(
+                                id: "order_123456",
+                                userId: "user_abc",
+                                bandId: "band_xyz",
+                                items: [
+                                    OrderItem(productId: "prod_1", size: "M", qty: 1),
+                                    OrderItem(productId: "prod_2", size: "L", qty: 2)
+                                ],
+                                amount: 85.99,
+                                status: .pendingPickup,
+                                qrCode: code,
+                                createdAt: Date()
+                            )
+                            
+                            scannedOrder = mockOrder
+                            showingOrderDetail = true
+                        })
+                        
+                        VStack {
+                            Spacer()
+                            
+                            Text("Scanning for QR code...")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .padding()
+                                .background(Color.black.opacity(0.7))
+                                .cornerRadius(10)
+                                .padding(.bottom, 50)
+                        }
+                    }
+                    .navigationTitle("QR Scanner")
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button("Cancel") {
+                                isScanning = false
+                            }
+                        }
+                    }
+                } else {
+                    VStack(spacing: 30) {
+                        Image(systemName: "qrcode.viewfinder")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 150, height: 150)
+                            .foregroundColor(.gray)
+                        
+                        Text("Scan QR Code to Verify Pickup")
+                            .font(.headline)
+                        
+                        Button(action: {
+                            isScanning = true
+                        }) {
+                            Text("Start Scanning")
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                                .frame(width: 200)
+                                .padding()
+                                .background(Color.purple)
+                                .cornerRadius(10)
+                        }
+                        .padding(.top, 20)
+                    }
+                    .navigationTitle("Scan Orders")
+                }
+            }
+            .sheet(isPresented: $showingOrderDetail) {
+                if let order = scannedOrder {
+                    ScannedOrderDetailView(order: order, onComplete: {
+                        showingOrderDetail = false
+                        scannedOrder = nil
+                        scannedCode = nil
+                    })
+                }
+            }
+        }
+    }
+}
+
+// ScannedOrderDetailView.swift
+import SwiftUI
+
+struct ScannedOrderDetailView: View {
+    let order: Order
+    let onComplete: () -> Void
+    @State private var isConfirming = false
+    @StateObject private var orderViewModel = OrderViewModel()
+    @Environment(\.presentationMode) var presentationMode
+    
+    var body: some View {
+        NavigationView {
+            VStack {
+                // Order status
+                VStack(spacing: 10) {
+                    if order.status == .pendingPickup {
+                        Image(systemName: "clock.fill")
+                            .font(.system(size: 40))
+                            .foregroundColor(.orange)
+                        
+                        Text("Ready for Pickup")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .padding(.bottom, 5)
+                    } else if order.status == .pickedUp {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 40))
+                            .foregroundColor(.green)
+                        
+                        Text("Already Picked Up")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .padding(.bottom, 5)
+                    } else {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 40))
+                            .foregroundColor(.red)
+                        
+                        Text("Cancelled")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .padding(.bottom, 5)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(
+                    order.status == .pendingPickup ? Color.orange.opacity(0.1) :
+                    order.status == .pickedUp ? Color.green.opacity(0.1) :
+                    Color.red.opacity(0.1)
+                )
+                .cornerRadius(10)
+                .padding()
+                
+                // Order details
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Order #\(order.id?.suffix(6) ?? "")")
+                        .font(.headline)
+                    
+                    let formatter = DateFormatter()
+                    formatter.dateStyle = .medium
+                    formatter.timeStyle = .short
+                    Text("Ordered: \(formatter.string(from: order.createdAt))")
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                    
+                    Text("Total: $\(String(format: "%.2f", order.amount))")
+                        .font(.headline)
+                        .padding(.top, 5)
+                }
+                .padding()
+                .background(Color(.systemGray6))
+                .cornerRadius(10)
+                .padding(.horizontal)
+                
+                // Items list
+                List {
+                    Section(header: Text("Items")) {
+                        ForEach(order.items, id: \.productId) { item in
+                            HStack {
+                                Text("Product: \(item.productId.suffix(6))")
+                                Spacer()
+                                Text("\(item.size) - Qty: \(item.qty)")
+                            }
+                        }
+                    }
+                }
+                
+                // Action buttons
+                if order.status == .pendingPickup {
+                    Button(action: {
+                        isConfirming = true
+                    }) {
+                        Text("Confirm Pickup")
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.purple)
+                            .cornerRadius(10)
+                    }
+                    .padding()
+                } else {
+                    Button(action: {
+                        presentationMode.wrappedValue.dismiss()
+                        onComplete()
+                    }) {
+                        Text("Close")
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.gray)
+                            .cornerRadius(10)
+                    }
+                    .padding()
+                }
+            }
+            .navigationTitle("Order Verification")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Close") {
+                        presentationMode.wrappedValue.dismiss()
+                        onComplete()
+                    }
+                }
+            }
+            .alert(isPresented: $isConfirming) {
+                Alert(
+                    title: Text("Confirm Pickup"),
+                    message: Text("Are you sure you want to mark this order as picked up?"),
+                    primaryButton: .default(Text("Yes")) {
+                        // In a real app, you would update the order status in Firestore
+                        orderViewModel.updateOrderStatus(orderId: order.id ?? "", status: .pickedUp) { success in
+                            if success {
+                                // Simulate updating the local order
+                                var updatedOrder = order
+                                updatedOrder.status = .pickedUp
+                                scannedOrder = updatedOrder
+                                
+                                // Haptic feedback
+                                let generator = UINotificationFeedbackGenerator()
+                                generator.notificationOccurred(.success)
+                                
+                                // Dismiss after a short delay
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                    presentationMode.wrappedValue.dismiss()
+                                    onComplete()
+                                }
+                            }
+                        }
+                    },
+                    secondaryButton: .cancel()
+                )
+            }
+        }
+    }
+}
+
+// STEP 23: Enhanced Merchant Settings View
+
+struct MerchantSettingsView: View {
+    @EnvironmentObject var authViewModel: AuthViewModel
+    @State private var bandName = "Your Band Name"
+    @State private var isEditingProfile = false
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("Store Profile")) {
+                    if isEditingProfile {
+                        TextField("Band Name", text: $bandName)
+                    } else {
+                        HStack {
+                            Text("Band Name")
+                            Spacer()
+                            Text(bandName)
+                                .foregroundColor(.gray)
+                        }
+                    }
+                    
+                    Button(action: {
+                        if isEditingProfile {
+                            // Save changes
+                            isEditingProfile = false
+                        } else {
+                            isEditingProfile = true
+                        }
+                    }) {
+                        Text(isEditingProfile ? "Save Changes" : "Edit Profile")
+                    }
+                }
+                
+                Section(header: Text("Events")) {
+                    NavigationLink(destination: EventManagementView()) {
+                        HStack {
+                            Image(systemName: "calendar")
+                                .foregroundColor(.purple)
+                            Text("Manage Events")
+                        }
+                    }
+                }
+                
+                Section(header: Text("Sales")) {
+                    NavigationLink(destination: SalesReportView()) {
+                        HStack {
+                            Image(systemName: "chart.bar")
+                                .foregroundColor(.purple)
+                            Text("Sales Reports")
+                        }
+                    }
+                }
+                
+                Section(header: Text("Payments")) {
+                    NavigationLink(destination: PaymentSettingsView()) {
+                        HStack {
+                            Image(systemName: "creditcard")
+                                .foregroundColor(.purple)
+                            Text("Payment Settings")
+                        }
+                    }
+                }
+                
+                Section(header: Text("Account")) {
+                    Button(action: {
+                        authViewModel.signOut()
+                    }) {
+                        HStack {
+                            Image(systemName: "arrow.right.square")
+                                .foregroundColor(.red)
+                            Text("Sign Out")
+                                .foregroundColor(.red)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Settings")
+        }
+    }
+}
+
+// Placeholder views for merchant settings sections
+struct EventManagementView: View {
+    var body: some View {
+        VStack {
+            Text("Event Management")
+                .font(.title)
+                .padding()
+            
+            Text("This feature will be implemented in a future update")
+                .foregroundColor(.gray)
+                .padding()
+        }
+        .navigationTitle("Manage Events")
+    }
+}
+
+struct SalesReportView: View {
+    var body: some View {
+        VStack {
+            Text("Sales Reports")
+                .font(.title)
+                .padding()
+            
+            Text("This feature will be implemented in a future update")
+                .foregroundColor(.gray)
+                .padding()
+        }
+        .navigationTitle("Sales")
+    }
+}
+
+struct PaymentSettingsView: View {
+    var body: some View {
+        VStack {
+            Text("Payment Settings")
+                .font(.title)
+                .padding()
+            
+            Text("This feature will be implemented in a future update")
+                .foregroundColor(.gray)
+                .padding()
+        }
+        .navigationTitle("Payments")
+    }
+}
+
+// STEP 24: Project Structure and Firebase Configuration
+
+/*
+Final Project Structure:
+
+MerchPit/
+├── MerchPitApp.swift
+├── ContentView.swift
+├── GoogleService-Info.plist
+├── Models/
+│   ├── Models.swift
+│   ├── AuthViewModel.swift
+│   ├── ProductViewModel.swift
+│   ├── CartViewModel.swift
+│   ├── OrderViewModel.swift
+│   └── EventViewModel.swift
+├── Services/
+│   ├── FirestoreService.swift
+│   ├── LocationService.swift
+│   ├── QRService.swift
+│   └── PaymentService.swift
+├── Views/
+│   ├── Auth/
+│   │   └── AuthView.swift
+│   ├── Fan/
+│   │   ├── FanDashboardView.swift
+│   │   ├── ProductCardView.swift
+│   │   ├── CartView.swift
+│   │   ├── OrderHistoryView.swift
+│   │   ├── OrderDetailView.swift
+│   │   └── OrderConfirmationView.swift
+│   ├── Merchant/
+│   │   ├── MerchantDashboardView.swift
+│   │   ├── AddProductView.swift
+│   │   ├── ProductDetailView.swift
+│   │   ├── OrderScannerView.swift
+│   │   ├── ScannedOrderDetailView.swift
+│   │   └── MerchantSettingsView.swift
+│   └── Common/
+│       ├── MainTabView.swift
+│       ├── ProfileView.swift
+│       └── QRScannerView.swift
+└── Info.plist
+
+Firebase Configuration Steps:
+
+1. Create a Firebase project:
+   - Go to console.firebase.google.com
+   - Click "Add project"
+   - Enter project name "MerchPit"
+   - Enable Google Analytics (optional)
+   - Create project
+
+2. Add an iOS app:
+   - In Firebase console, click iOS icon
+   - Enter your bundle ID (e.g., com.yourcompany.MerchPit)
+   - Enter app nickname "MerchPit iOS"
+   - Download GoogleService-Info.plist
+
+3. Add the plist file to your Xcode project:
+   - Drag the downloaded GoogleService-Info.plist into your Xcode project
+   - Make sure "Copy items if needed" is checked
+
+4. Add Firebase SDK via Swift Package Manager:
+   - In Xcode: File > Add Packages
+   - Enter URL: https://github.com/firebase/firebase-ios-sdk
+   - Select these packages:
+     - FirebaseAuth
+     - FirebaseFirestore
+     - FirebaseStorage
+     - FirebaseFirestoreSwift
+
+5. Initialize Firebase in your app:
+   - Make sure you've added the initialization code to MerchPitApp.swift
+   - Look for: FirebaseApp.configure()
+
+6. Set up Firebase Authentication:
+   - In Firebase console, go to Authentication
+   - Click "Get started"
+   - Enable Email/Password authentication
+   - Enable Apple authentication (for Sign in with Apple)
+
+7. Set up Firestore Database:
+   - In Firebase console, go to Firestore Database
+   - Click "Create database"
+   - Start in production mode
+   - Choose a location close to your target users
+
+8. Set up Firebase Storage:
+   - In Firebase console, go to Storage
+   - Click "Get started"
+   - Set up storage rules as needed
+
+9. Define Firestore security rules:
+   - In Firebase console, go to Firestore > Rules
+   - Update rules to allow authenticated users to access data
+
+Example Firestore security rules:
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // User profiles - users can read/write only their own data
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Products - read by anyone, write by merchants only
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if request.auth != null && 
+                    get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "merchant";
+    }
+    
+    // Orders - users can read their own orders, merchants can read/update orders for their band
+    match /orders/{orderId} {
+      allow read: if request.auth != null && 
+                   (resource.data.user_id == request.auth.uid || 
+                    resource.data.band_id in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.bandIds);
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && 
+                     resource.data.band_id in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.bandIds;
+    }
+    
+    // Events - read by anyone, write by admins only
+    match /events/{eventId} {
+      allow read: if true;
+      allow write: if request.auth != null && 
+                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+    }
+  }
+}
+```
+
+10. Database Structure:
+
+```
+/users/{userId}
+  - email: string
+  - role: string (fan, merchant, admin)
+  - createdAt: timestamp
+  - bandIds: [string] (for merchants)
+
+/products/{productId}
+  - band_id: string
+  - title: string
+  - price: number
+  - sizes: [string]
+  - inventory: {size: number}
+  - image_url: string
+  - active: boolean
+
+/orders/{orderId}
+  - user_id: string
+  - band_id: string
+  - items: [{product_id: string, size: string, qty: number}]
+  - amount: number
+  - status: string (pending_pickup, picked_up, cancelled)
+  - qr_code: string
+  - created_at: timestamp
+
+/events/{eventId}
+  - name: string
+  - venue_name: string
+  - address: string
+  - start_date: timestamp
+  - end_date: timestamp
+  - latitude: number
+  - longitude: number
+  - geofence_radius: number
+  - active: boolean
+  - merchant_ids: [string]
+
+/bands/{bandId}
+  - name: string
+  - description: string
+  - logo_url: string
+  - owner_user_id: string
+  - member_user_ids: [string]
+```
+
+11. Stripe Integration:
+
+To integrate Stripe for payments, you'll need to:
+
+1. Create a Stripe account at stripe.com
+2. Install the Stripe iOS SDK via Swift Package Manager:
+   - In Xcode: File > Add Packages
+   - Enter URL: https://github.com/stripe/stripe-ios
+   - Select the packages you need (StripePaymentSheet is recommended for simplicity)
+
+3. Create a server component to create payment intents
+   - This could be a Firebase Cloud Function
+   - The server should securely hold your Stripe secret key
+
+4. Implement the Stripe payment flow in your app
+   - Use StripePaymentSheet for a pre-built UI
+   - Or build a custom UI using Stripe Elements
+
+Example Firebase Cloud Function for Stripe (in Node.js):
+```javascript
+const functions = require('firebase-functions');
+const admin = require('firebase-admin');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+
+admin.initializeApp();
+
+exports.createPaymentIntent = functions.https.onCall(async (data, context) => {
+  // Ensure user is authenticated
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const { amount, currency = 'usd', metadata } = data;
+
+  try {
+    // Create a payment intent
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(amount * 100), // Convert to cents
+      currency,
+      metadata
+    });
+
+    // Return the client secret
+    return {
+      clientSecret: paymentIntent.client_secret
+    };
+  } catch (error) {
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+```
+
+// STEP 25: Deployment Checklist
+
+/*
+Before submitting to the App Store, make sure to:
+
+1. Test all user flows:
+   - Fan registration and authentication
+   - Merch team registration and authentication
+   - Geofencing and event discovery
+   - Browsing and adding items to cart
+   - Checkout and payment processing
+   - QR code generation and scanning
+   - Order history and status updates
+
+2. Implement app settings in Info.plist:
+   - Privacy permissions (location, camera)
+   - Required device capabilities
+   - Supported orientations
+   - App Transport Security settings
+
+3. Create app icons and launch screen:
+   - Design app icon in various sizes
+   - Create launch screen storyboard
+
+4. Prepare App Store submission materials:
+   - App name and description
+   - Keywords for search
+   - Screenshots of the app
+   - App preview video (optional)
+   - Privacy policy URL
+
+5. Configure Apple Sign-In:
+   - Enable Sign in with Apple capability
+   - Configure Associated Domains if needed
+
+6. Test on multiple devices:
+   - Different iPhone models
+   - Different iOS versions
+   - Test with poor network connectivity
+
+7. Implement analytics and crash reporting:
+   - Set up Firebase Analytics
+   - Configure Firebase Crashlytics
+
+8. Prepare for App Privacy details:
+   - Identify data types collected by your app
+   - Determine how each type is used
+   - Document third-party SDKs used
+
+Good luck with your MerchPit app! This starter project provides the foundation for all the core functionality described in the PRD and project plan.
+*/

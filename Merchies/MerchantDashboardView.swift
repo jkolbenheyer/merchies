@@ -7,6 +7,7 @@ struct MerchantDashboardView: View {
     @StateObject private var productViewModel = ProductViewModel()
     @EnvironmentObject var authViewModel: AuthViewModel
     @State private var showingAddProduct = false
+    @State private var showingCreateEvent = false
     @State private var showingProductDetail: Product? = nil
     @State private var isStoreActive = true
     @State private var errorMessage: String? = nil
@@ -30,6 +31,49 @@ struct MerchantDashboardView: View {
                 .cornerRadius(10)
                 .padding(.horizontal)
                 
+                // Quick Actions Section
+                HStack(spacing: 15) {
+                    // Create Event Button
+                    Button(action: {
+                        showingCreateEvent = true
+                    }) {
+                        VStack(spacing: 8) {
+                            Image(systemName: "calendar.badge.plus")
+                                .font(.system(size: 24))
+                                .foregroundColor(.white)
+                            Text("Create Event")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(.white)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(Color.purple)
+                        .cornerRadius(10)
+                    }
+                    
+                    // Add Product Button
+                    Button(action: {
+                        showingAddProduct = true
+                    }) {
+                        VStack(spacing: 8) {
+                            Image(systemName: "plus.circle")
+                                .font(.system(size: 24))
+                                .foregroundColor(.purple)
+                            Text("Add Product")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(.purple)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(Color.purple.opacity(0.1))
+                        .cornerRadius(10)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 10)
+                
                 if let error = errorMessage {
                     Text(error)
                         .foregroundColor(.red)
@@ -51,25 +95,61 @@ struct MerchantDashboardView: View {
                             .font(.title3)
                             .fontWeight(.semibold)
                         
-                        Text("Add your first product to get started")
+                        Text("Add your first product to get started selling at events")
                             .multilineTextAlignment(.center)
                             .foregroundColor(.gray)
                             .padding(.horizontal)
                         
-                        Button(action: {
-                            showingAddProduct = true
-                        }) {
-                            Text("+ Add Product")
+                        VStack(spacing: 12) {
+                            Button(action: {
+                                showingCreateEvent = true
+                            }) {
+                                HStack {
+                                    Image(systemName: "calendar.badge.plus")
+                                    Text("Create Your First Event")
+                                }
                                 .fontWeight(.semibold)
                                 .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
                                 .padding()
                                 .background(Color.purple)
                                 .cornerRadius(10)
+                            }
+                            
+                            Button(action: {
+                                showingAddProduct = true
+                            }) {
+                                HStack {
+                                    Image(systemName: "plus")
+                                    Text("Add Your First Product")
+                                }
+                                .fontWeight(.semibold)
+                                .foregroundColor(.purple)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.purple.opacity(0.1))
+                                .cornerRadius(10)
+                            }
                         }
-                        .padding()
+                        .padding(.horizontal)
                     }
-                    .padding(.top, 50)
+                    .padding(.top, 30)
                 } else {
+                    // Products section header
+                    HStack {
+                        Text("Your Products")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                        
+                        Spacer()
+                        
+                        Text("\(productViewModel.products.count) item\(productViewModel.products.count == 1 ? "" : "s")")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 5)
+                    
                     // Product list
                     List {
                         ForEach(productViewModel.products) { product in
@@ -92,6 +172,7 @@ struct MerchantDashboardView: View {
                                                     .aspectRatio(contentMode: .fill)
                                                     .frame(width: 60, height: 60)
                                                     .cornerRadius(8)
+                                                    .clipped()
                                             case .failure:
                                                 Rectangle()
                                                     .fill(Color.gray.opacity(0.2))
@@ -119,6 +200,7 @@ struct MerchantDashboardView: View {
                                     VStack(alignment: .leading, spacing: 5) {
                                         Text(product.title)
                                             .font(.headline)
+                                            .lineLimit(1)
                                         
                                         Text("$\(String(format: "%.2f", product.price))")
                                             .font(.subheadline)
@@ -128,32 +210,61 @@ struct MerchantDashboardView: View {
                                         Text(product.sizes.joined(separator: ", "))
                                             .font(.caption)
                                             .foregroundColor(.gray)
+                                            .lineLimit(1)
+                                        
+                                        // Show total inventory
+                                        let totalInventory = product.inventory.values.reduce(0, +)
+                                        Text("Stock: \(totalInventory)")
+                                            .font(.caption2)
+                                            .foregroundColor(totalInventory > 0 ? .green : .red)
                                     }
                                     .padding(.leading, 5)
                                     
                                     Spacer()
                                     
-                                    // Status indicator
-                                    Circle()
-                                        .fill(product.active ? Color.green : Color.gray)
-                                        .frame(width: 12, height: 12)
+                                    VStack(spacing: 8) {
+                                        // Status indicator
+                                        Circle()
+                                            .fill(product.active ? Color.green : Color.gray)
+                                            .frame(width: 12, height: 12)
+                                        
+                                        // Active/Inactive text
+                                        Text(product.active ? "Active" : "Inactive")
+                                            .font(.caption2)
+                                            .foregroundColor(product.active ? .green : .gray)
+                                    }
                                 }
-                                .padding(.vertical, 5)
+                                .padding(.vertical, 8)
                             }
                             .buttonStyle(PlainButtonStyle())
                         }
                     }
+                    .listStyle(PlainListStyle())
                 }
             }
             .navigationTitle("Your Store")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        showingAddProduct = true
-                    }) {
+                    Menu {
+                        Button(action: {
+                            showingCreateEvent = true
+                        }) {
+                            Label("Create Event", systemImage: "calendar.badge.plus")
+                        }
+                        
+                        Button(action: {
+                            showingAddProduct = true
+                        }) {
+                            Label("Add Product", systemImage: "plus")
+                        }
+                    } label: {
                         Image(systemName: "plus")
+                            .font(.system(size: 18, weight: .medium))
                     }
                 }
+            }
+            .sheet(isPresented: $showingCreateEvent) {
+                CreateEventView()
             }
             .sheet(isPresented: $showingAddProduct) {
                 AddProductView(bandId: getMerchantBandId())

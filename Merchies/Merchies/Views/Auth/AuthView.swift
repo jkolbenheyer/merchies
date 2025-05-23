@@ -5,24 +5,23 @@ struct AuthView: View {
     @State private var email = ""
     @State private var password = ""
     @EnvironmentObject var authViewModel: AuthViewModel
-    
+
     var body: some View {
         NavigationView {
             ZStack {
-                // Black background
                 Color.black
-                    .ignoresSafeArea()
+                    .edgesIgnoringSafeArea(.all)
 
                 ScrollView {
                     VStack(spacing: 20) {
-                        // Logo image
+                        // Merchies logo
                         Image("MerchiesLogo")
                             .resizable()
                             .scaledToFit()
-                            .frame(width: 200, height: 100)
+                            .frame(width: 150, height: 150)
                             .padding(.top, 50)
-                        
-                        // Form
+
+                        // Form fields
                         VStack(spacing: 15) {
                             TextField("Email", text: $email)
                                 .keyboardType(.emailAddress)
@@ -30,20 +29,12 @@ struct AuthView: View {
                                 .padding()
                                 .background(Color(.systemGray6))
                                 .cornerRadius(8)
-                            
-                            if isSignIn {
-                                SecureField("Password", text: $password)
-                                    .padding()
-                                    .background(Color(.systemGray6))
-                                    .cornerRadius(8)
-                            } else {
-                                SecureField("Create Password", text: $password)
-                                    .padding()
-                                    .background(Color(.systemGray6))
-                                    .cornerRadius(8)
-                            }
-                            
-                            // Primary button
+
+                            SecureField(isSignIn ? "Password" : "Create Password", text: $password)
+                                .padding()
+                                .background(Color(.systemGray6))
+                                .cornerRadius(8)
+
                             Button(action: {
                                 if isSignIn {
                                     authViewModel.signInWithEmail(email: email, password: password)
@@ -56,12 +47,11 @@ struct AuthView: View {
                                     .foregroundColor(.white)
                                     .frame(maxWidth: .infinity)
                                     .padding()
-                                    .background(Color.purple)
+                                    .background(Color.cyan)
                                     .cornerRadius(8)
                             }
                             .disabled(email.isEmpty || password.isEmpty || authViewModel.isLoading)
-                            
-                            // Sign in with Apple button
+
                             Button(action: {
                                 authViewModel.signInWithApple()
                             }) {
@@ -76,58 +66,43 @@ struct AuthView: View {
                                 .background(Color.black)
                                 .cornerRadius(8)
                             }
-                            
-                            // Toggle between sign in and create account
+
                             Button(action: {
                                 isSignIn.toggle()
-                                // Clear fields when switching modes
                                 email = ""
                                 password = ""
                             }) {
                                 Text(isSignIn ? "Need an account? Sign Up" : "Already have an account? Sign In")
-                                    .foregroundColor(.purple)
+                                    .foregroundColor(.cyan)
                             }
                             .padding(.top, 10)
-                            
+
                             if isSignIn {
                                 Button("Forgot Password?") {
                                     if !email.isEmpty {
-                                        authViewModel.sendPasswordReset(email: email) { success in
-                                            // Show success message
-                                        }
+                                        authViewModel.sendPasswordReset(email: email) { _ in }
                                     }
                                 }
-                                .foregroundColor(.purple)
+                                .foregroundColor(.cyan)
                                 .padding(.top, 5)
                             }
                         }
                         .padding(.horizontal)
-                        
+
                         Spacer()
                     }
                 }
-                .navigationBarHidden(true)
-                
-                .overlay(
-                    Group {
-                        if authViewModel.isLoading {
-                            ProgressView()
-                                .scaleEffect(1.5)
-                                .progressViewStyle(CircularProgressViewStyle(tint: .purple))
-                                .background(Color.white.opacity(0.8))
-                                .cornerRadius(10)
-                                .frame(width: 80, height: 80)
-                        }
-                    }
-                )
-            }
-        }
-    }
-}
 
-struct AuthView_Previews: PreviewProvider {
-    static var previews: some View {
-        AuthView()
-            .environmentObject(AuthViewModel())
+                if authViewModel.isLoading {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .progressViewStyle(CircularProgressViewStyle(tint: .cyan))
+                        .frame(width: 80, height: 80)
+                        .background(Color.white.opacity(0.8))
+                        .cornerRadius(10)
+                }
+            }
+            .navigationBarHidden(true)
+        }
     }
 }
