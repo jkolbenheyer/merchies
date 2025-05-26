@@ -131,6 +131,22 @@ class FirestoreService {
             completion(nil, error)
         }
     }
+    // MARK: – Events
+
+    /// Update an existing event document. Merges only the changed fields.
+    func updateEvent(_ event: Event, completion: @escaping (Error?) -> Void) {
+        guard let id = event.id else {
+            completion(NSError(domain: "FirestoreService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Missing event ID"]))
+            return
+        }
+        do {
+            let ref = db.collection("events").document(id)
+            try ref.setData(from: event, merge: true, completion: completion)
+        } catch {
+            completion(error)
+        }
+    }
+
     
     // MARK: - Orders
     

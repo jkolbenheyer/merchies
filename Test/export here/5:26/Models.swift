@@ -157,72 +157,52 @@ struct Event: Identifiable, Codable {
     var endDate: Date
     var latitude: Double
     var longitude: Double
-    var geofenceRadius: Double    // in meters
+    var geofenceRadius: Double // in meters
     var active: Bool
     var merchantIds: [String]
-    var imageUrl: String?         // ← NEW: Optional event image URL
-    var productIds: [String]      // Array of product IDs at this event
-    var description: String?      // Optional event description
-    var eventType: EventType?     // Optional categorization
-    var maxCapacity: Int?         // Optional maximum capacity
-    var ticketPrice: Double?      // Optional ticket price
-
+    var productIds: [String] // NEW: Array of product IDs available at this event
+    var description: String? // NEW: Optional event description
+    var eventType: EventType? // NEW: Optional event type categorization
+    var maxCapacity: Int? // NEW: Optional maximum capacity
+    var ticketPrice: Double? // NEW: Optional ticket price
+    
     enum CodingKeys: String, CodingKey {
         case id
         case name
-        case venueName     = "venue_name"
+        case venueName = "venue_name"
         case address
-        case startDate     = "start_date"
-        case endDate       = "end_date"
+        case startDate = "start_date"
+        case endDate = "end_date"
         case latitude
         case longitude
         case geofenceRadius = "geofence_radius"
         case active
-        case merchantIds   = "merchant_ids"
-        case imageUrl      = "image_url"       // NEW
-        case productIds    = "product_ids"
+        case merchantIds = "merchant_ids"
+        case productIds = "product_ids" // NEW
         case description
-        case eventType     = "event_type"
-        case maxCapacity   = "max_capacity"
-        case ticketPrice   = "ticket_price"
+        case eventType = "event_type" // NEW
+        case maxCapacity = "max_capacity" // NEW
+        case ticketPrice = "ticket_price" // NEW
     }
-
-    init(
-        id: String? = nil,
-        name: String,
-        venueName: String,
-        address: String,
-        startDate: Date,
-        endDate: Date,
-        latitude: Double,
-        longitude: Double,
-        geofenceRadius: Double,
-        active: Bool,
-        merchantIds: [String],
-        imageUrl: String? = nil,            // NEW default
-        productIds: [String] = [],
-        description: String? = nil,
-        eventType: EventType? = nil,
-        maxCapacity: Int? = nil,
-        ticketPrice: Double? = nil
-    ) {
-        self.id             = id
-        self.name           = name
-        self.venueName      = venueName
-        self.address        = address
-        self.startDate      = startDate
-        self.endDate        = endDate
-        self.latitude       = latitude
-        self.longitude      = longitude
+    
+    // Convenience initializer for backward compatibility
+    init(id: String? = nil, name: String, venueName: String, address: String, startDate: Date, endDate: Date, latitude: Double, longitude: Double, geofenceRadius: Double, active: Bool, merchantIds: [String], productIds: [String] = [], description: String? = nil, eventType: EventType? = nil, maxCapacity: Int? = nil, ticketPrice: Double? = nil) {
+        self.id = id
+        self.name = name
+        self.venueName = venueName
+        self.address = address
+        self.startDate = startDate
+        self.endDate = endDate
+        self.latitude = latitude
+        self.longitude = longitude
         self.geofenceRadius = geofenceRadius
-        self.active         = active
-        self.merchantIds    = merchantIds
-        self.imageUrl       = imageUrl         // ← store your uploaded URL here
-        self.productIds     = productIds
-        self.description    = description
-        self.eventType      = eventType
-        self.maxCapacity    = maxCapacity
-        self.ticketPrice    = ticketPrice
+        self.active = active
+        self.merchantIds = merchantIds
+        self.productIds = productIds
+        self.description = description
+        self.eventType = eventType
+        self.maxCapacity = maxCapacity
+        self.ticketPrice = ticketPrice
     }
     
     // Helper properties

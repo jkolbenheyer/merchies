@@ -5,19 +5,24 @@ import FirebaseFirestore
 
 struct MerchantDashboardView: View {
     @StateObject private var productViewModel = ProductViewModel()
-    @StateObject private var eventViewModel = EventViewModel()
+    @StateObject private var eventViewModel   = EventViewModel()
     @EnvironmentObject var authViewModel: AuthViewModel
-    @State private var showingAddProduct = false
-    @State private var showingCreateEvent = false
-    @State private var showingEventsList = false
+
+    // sheets & selections
+    @State private var showingAddProduct: Bool    = false
+    @State private var showingCreateEvent: Bool   = false
+    @State private var showingEventsList: Bool    = false
     @State private var showingProductDetail: Product? = nil
-    @State private var isStoreActive = true
+    @State private var editingEvent: Event?       = nil
+
+    // UI state
+    @State private var isStoreActive    = true
     @State private var errorMessage: String? = nil
-    
+
     var body: some View {
         NavigationView {
-            VStack {
-                // Store status toggle
+            VStack(spacing: 16) {
+                // MARK: — Store status toggle
                 HStack {
                     Text("Store Status:")
                         .font(.headline)
@@ -30,16 +35,18 @@ struct MerchantDashboardView: View {
                 .background(Color(.systemGray6))
                 .cornerRadius(10)
                 .padding(.horizontal)
-                
-                // Quick Actions Section
+
+                // MARK: — Quick Actions Section
                 HStack(spacing: 15) {
-                    // Manage Events Button
-                    Button(action: { showingEventsList = true }) {
+                    // Manage Events
+                    Button {
+                        showingCreateEvent = true
+                    } label: {
                         VStack(spacing: 8) {
                             Image(systemName: "calendar.badge.plus")
                                 .font(.system(size: 24))
                                 .foregroundColor(.white)
-                            Text("Manage Events")
+                            Text("Create Event")
                                 .font(.caption)
                                 .fontWeight(.medium)
                                 .foregroundColor(.white)
@@ -50,8 +57,11 @@ struct MerchantDashboardView: View {
                         .background(Color.cyan)
                         .cornerRadius(10)
                     }
-                    // Add Product Button
-                    Button(action: { showingAddProduct = true }) {
+
+                    // Add Product
+                    Button {
+                        showingAddProduct = true
+                    } label: {
                         VStack(spacing: 8) {
                             Image(systemName: "plus.circle")
                                 .font(.system(size: 24))
@@ -69,72 +79,38 @@ struct MerchantDashboardView: View {
                 }
                 .padding(.horizontal)
                 .padding(.bottom, 10)
-                
-                // Stats Overview Section
-                if !eventViewModel.events.isEmpty || !productViewModel.products.isEmpty {
-                    HStack(spacing: 20) {
-                        VStack {
-                            Text("\(eventViewModel.events.count)")
-                                .font(.title2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.cyan)
-                            Text("Events")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        Divider().frame(height: 30)
-                        VStack {
-                            Text("\(productViewModel.products.count)")
-                                .font(.title2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.cyan)
-                            Text("Products")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        Divider().frame(height: 30)
-                        VStack {
-                            let totalStock = productViewModel.products.reduce(0) { $0 + $1.totalInventory }
-                            Text("\(totalStock)")
-                                .font(.title2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.cyan)
-                            Text("Total Stock")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .padding()
-                    .background(Color.cyan.opacity(0.05))
-                    .cornerRadius(10)
-                    .padding(.horizontal)
-                }
-                
+
+               
+                // MARK: — Error Message
                 if let error = errorMessage {
                     Text(error)
                         .foregroundColor(.red)
-                        .padding()
+                        .padding(.horizontal)
                 }
-                
+
+                // MARK: — Loading / Empty / Content
                 if productViewModel.isLoading || eventViewModel.isLoading {
                     ProgressView()
                         .scaleEffect(1.5)
                         .progressViewStyle(CircularProgressViewStyle(tint: .cyan))
-                } else if productViewModel.products.isEmpty && eventViewModel.events.isEmpty {
+                        .padding()
+                }
+                else if productViewModel.products.isEmpty && eventViewModel.events.isEmpty {
                     // Empty state
                     VStack(spacing: 20) {
                         Image(systemName: "storefront")
                             .font(.system(size: 60))
                             .foregroundColor(.gray)
                         Text("Welcome to MerchPit!")
-                            .font(.title2)
-                            .fontWeight(.bold)
+                            .font(.title2).fontWeight(.bold)
                         Text("Start by creating an event and adding products to build your mobile merch store")
                             .multilineTextAlignment(.center)
                             .foregroundColor(.gray)
                             .padding(.horizontal)
                         VStack(spacing: 12) {
-                            Button(action: { showingCreateEvent = true }) {
+                            Button {
+                                showingCreateEvent = true
+                            } label: {
                                 HStack {
                                     Image(systemName: "calendar.badge.plus")
                                     Text("Create Your First Event")
@@ -146,7 +122,9 @@ struct MerchantDashboardView: View {
                                 .background(Color.cyan)
                                 .cornerRadius(10)
                             }
-                            Button(action: { showingAddProduct = true }) {
+                            Button {
+                                showingAddProduct = true
+                            } label: {
                                 HStack {
                                     Image(systemName: "plus")
                                     Text("Add Your First Product")
@@ -162,8 +140,9 @@ struct MerchantDashboardView: View {
                         .padding(.horizontal)
                     }
                     .padding(.top, 30)
-                } else {
-                    // Content
+                }
+                else {
+                    // Main content: events + products
                     ScrollView {
                         VStack(spacing: 20) {
                             if !eventViewModel.events.isEmpty { EventsSection() }
@@ -172,57 +151,75 @@ struct MerchantDashboardView: View {
                         .padding(.horizontal)
                     }
                 }
+
+                Spacer() // push content up
             }
             .navigationTitle("Your Store")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
-                        Button(action: { showingEventsList = true }) { Label("Manage Events", systemImage: "calendar") }
-                        Button(action: { showingCreateEvent = true }) { Label("Create Event", systemImage: "calendar.badge.plus") }
+                        Button { showingEventsList = true }
+                        label: { Label("Manage Events", systemImage: "calendar") }
+
+                        Button { showingCreateEvent = true }
+                        label: { Label("Create Event", systemImage: "calendar.badge.plus") }
+
                         Divider()
-                        Button(action: { showingAddProduct = true }) { Label("Add Product", systemImage: "plus") }
+
+                        Button { showingAddProduct = true }
+                        label: { Label("Add Product", systemImage: "plus") }
                     } label: {
-                        Image(systemName: "plus").font(.system(size: 18, weight: .medium))
+                        Image(systemName: "plus")
+                            .font(.system(size: 18, weight: .medium))
                     }
                 }
             }
-            .sheet(isPresented: $showingCreateEvent, onDismiss: loadMerchantData) { CreateEventView() }
-            .sheet(isPresented: $showingEventsList, onDismiss: loadMerchantData) { EventsListView() }
-            .sheet(isPresented: $showingAddProduct, onDismiss: loadMerchantProducts) { MerchProductEditView(bandId: getMerchantBandId()) }
+            // MARK: — Sheets
+            .sheet(isPresented: $showingCreateEvent, onDismiss: loadMerchantData) {
+                CreateEventView()
+            }
+            .sheet(isPresented: $showingEventsList, onDismiss: loadMerchantData) {
+                EventsListView()
+            }
+            .sheet(isPresented: $showingAddProduct, onDismiss: loadMerchantProducts) {
+                MerchProductEditView(bandId: getMerchantBandId())
+            }
             .sheet(item: $showingProductDetail) { product in
                 MerchantProductDetailView(product: product)
             }
+            .sheet(item: $editingEvent) { event in
+                EditEventView(vm: SingleEventViewModel(event: event))
+            }
+            // MARK: — Lifecycle
             .onAppear(perform: loadMerchantData)
             .refreshable { loadMerchantData() }
         }
     }
-    
-    // MARK: - Events Section
+
+    // MARK: — Events Section
     @ViewBuilder
     private func EventsSection() -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Your Events")
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.headline).fontWeight(.semibold)
                 Spacer()
                 Text("\(eventViewModel.events.count) item\(eventViewModel.events.count == 1 ? "" : "s")")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(.subheadline).foregroundColor(.secondary)
             }
+
             LazyVStack(spacing: 8) {
                 ForEach(eventViewModel.events) { event in
-                    Button(action: { showingEventsList = true }) {
+                    Button {
+                        editingEvent = event
+                    } label: {
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
                                 Text(event.name)
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
-                                    .lineLimit(1)
+                                    .font(.subheadline).fontWeight(.semibold).lineLimit(1)
                                 Spacer()
                                 Image(systemName: "chevron.right")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .font(.caption).foregroundColor(.secondary)
                             }
                             HStack(spacing: 4) {
                                 Image(systemName: "calendar")
@@ -230,14 +227,12 @@ struct MerchantDashboardView: View {
                                 Spacer()
                                 Text("\(event.productIds.count) products")
                             }
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
+                            .font(.caption2).foregroundColor(.secondary)
                             HStack(spacing: 4) {
                                 Image(systemName: "location")
                                 Text(event.address)
                             }
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
+                            .font(.caption2).foregroundColor(.secondary)
                         }
                         .padding()
                         .background(Color(.systemGray6))
@@ -248,59 +243,64 @@ struct MerchantDashboardView: View {
             }
         }
     }
-    
-    // MARK: - Products Section
+
+    // MARK: — Products Section
     @ViewBuilder
     private func ProductsSection() -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Your Products")
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.headline).fontWeight(.semibold)
                 Spacer()
                 Text("\(productViewModel.products.count) item\(productViewModel.products.count == 1 ? "" : "s")")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(.subheadline).foregroundColor(.secondary)
             }
+
             LazyVStack(spacing: 8) {
                 ForEach(productViewModel.products) { product in
-                    ProductRow(product: product) { showingProductDetail = product }
+                    ProductRow(product: product) {
+                        showingProductDetail = product
+                    }
                 }
             }
         }
     }
-    
-    // MARK: - Helper Functions
-    private func formatDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .short
-        return formatter.string(from: date)
-    }
+
+    // MARK: — Helpers
     private func formatDateTime(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .short
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+        let f = DateFormatter()
+        f.dateStyle = .short
+        f.timeStyle = .short
+        return f.string(from: date)
     }
 
-    func getMerchantBandId() -> String {
-        return authViewModel.user?.uid ?? "mock_band_id"
+    private func getMerchantBandId() -> String {
+        authViewModel.user?.uid ?? "mock_band_id"
     }
-    func loadMerchantData() {
-        guard let user = authViewModel.user else { errorMessage = "User not logged in"; return }
+
+    private func loadMerchantData() {
+        guard let user = authViewModel.user else {
+            errorMessage = "User not logged in"
+            return
+        }
         eventViewModel.fetchMerchantEvents(merchantId: user.uid)
         loadMerchantProducts()
     }
-    func loadMerchantProducts() {
-        guard let user = authViewModel.user else { errorMessage = "User not logged in"; return }
-        let db = Firestore.firestore()
+
+    private func loadMerchantProducts() {
+        guard let user = authViewModel.user else {
+            errorMessage = "User not logged in"
+            return
+        }
         productViewModel.isLoading = true
-        db.collection("products").whereField("band_id", isEqualTo: user.uid)
+        Firestore.firestore()
+            .collection("products")
+            .whereField("band_id", isEqualTo: user.uid)
             .getDocuments { snapshot, error in
                 DispatchQueue.main.async {
                     productViewModel.isLoading = false
-                    if let error = error {
-                        errorMessage = "Error fetching products: \(error.localizedDescription)"
+                    if let err = error {
+                        errorMessage = "Error fetching products: \(err.localizedDescription)"
                         return
                     }
                     productViewModel.products = snapshot?.documents.compactMap {
@@ -311,10 +311,7 @@ struct MerchantDashboardView: View {
     }
 }
 
-
-
-
-// MARK: - ProductRow Component
+// MARK: — ProductRow Component
 struct ProductRow: View {
     let product: Product
     let onTap: () -> Void
@@ -357,7 +354,6 @@ struct ProductRow: View {
                         .font(.subheadline)
                         .fontWeight(.medium)
                         .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
 
                     HStack {
                         Text("$\(String(format: "%.2f", product.price))")
