@@ -131,8 +131,116 @@ class FirestoreService {
             completion(nil, error)
         }
     }
-    // MARK: – Events
-
+    
+    // NEW: Fetch products for a specific event (using event_ids field) - Different name to avoid conflict
+    func fetchProductsForEvent(eventId: String, completion: @escaping ([Product]?, Error?) -> Void) {
+        db.collection("products")
+            .whereField("event_ids", arrayContains: eventId)
+            .whereField("active", isEqualTo: true)
+            .getDocuments { snapshot, error in
+                if let error = error {
+                    print("❌ Failed to fetch event products: \(error.localizedDescription)")
+                    completion(nil, error)
+                    return
+                }
+                
+                let products = snapshot?.documents.compactMap { document -> Product? in
+                    try? document.data(as: Product.self)
+                }
+                
+                print("✅ Fetched \(products?.count ?? 0) products for event")
+                completion(products, nil)
+            }
+    }
+    
+    // NEW: Fetch available products for a merchant (excluding those already in event)
+    func fetchAvailableProductsForMerchant(merchantId: String, excludingEventId: String?, completion: @escaping ([Product]?, Error?) -> Void) {
+        db.collection("products")
+            .whereField("band_id", isEqualTo: merchantId)
+            .whereField("active", isEqualTo: true)
+            .getDocuments { snapshot, error in
+                if let error = error {
+                    print("❌ Failed to fetch merchant products: \(error.localizedDescription)")
+                    completion(nil, error)
+                    return
+                }
+                
+                var products = snapshot?.documents.compactMap { document -> Product? in
+                    try? document.data(as: Product.self)
+                } ?? []
+                
+                // Filter out products already in the event if excludingEventId is provided
+                if let eventId = excludingEventId {
+                    products = products.filter { product in
+                        !product.eventIds.contains(eventId)
+                    }
+                }
+                
+                print("✅ Fetched \(products.count) available products for merchant")
+                completion(products, nil)
+            }
+    }
+    
+    // NEW: Add product to event - Different name to avoid conflict
+    func linkProductToEvent(productId: String, eventId: String, completion: @escaping (Bool, Error?) -> Void) {
+        // Use a batch write to update both documents atomically
+        let batch = db.batch()
+        
+        // Update event's product list
+        let eventRef = db.collection("events").document(eventId)
+        batch.updateData([
+            "product_ids": FieldValue.arrayUnion([productId])
+        ], forDocument: eventRef)
+        
+        // Update product's event list
+        let productRef = db.collection("products").document(productId)
+        batch.updateData([
+            "event_ids": FieldValue.arrayUnion([eventId])
+        ], forDocument: productRef)
+        
+        // Commit the batch
+        batch.commit { error in
+            if let error = error {
+                print("❌ Failed to add product to event: \(error.localizedDescription)")
+                completion(false, error)
+            } else {
+                print("✅ Product added to event successfully")
+                completion(true, nil)
+            }
+        }
+    }
+    
+    // NEW: Remove product from event - Different name to avoid conflict
+    func unlinkProductFromEvent(productId: String, eventId: String, completion: @escaping (Bool, Error?) -> Void) {
+        // Use a batch write to update both documents atomically
+        let batch = db.batch()
+        
+        // Update event's product list
+        let eventRef = db.collection("events").document(eventId)
+        batch.updateData([
+            "product_ids": FieldValue.arrayRemove([productId])
+        ], forDocument: eventRef)
+        
+        // Update product's event list
+        let productRef = db.collection("products").document(productId)
+        batch.updateData([
+            "event_ids": FieldValue.arrayRemove([eventId])
+        ], forDocument: productRef)
+        
+        // Commit the batch
+        batch.commit { error in
+            if let error = error {
+                print("❌ Failed to remove product from event: \(error.localizedDescription)")
+                completion(false, error)
+            } else {
+                print("✅ Product removed from event successfully")
+                completion(true, nil)
+            }
+        }
+    }
+    
+    // MARK: - Events
+    
     /// Update an existing event document. Merges only the changed fields.
     func updateEvent(_ event: Event, completion: @escaping (Error?) -> Void) {
         guard let id = event.id else {
@@ -146,7 +254,128 @@ class FirestoreService {
             completion(error)
         }
     }
-
+    
+    // NEW: Enhanced update event method - Different name to avoid conflict
+    func saveEvent(_ event: Event, completion: @escaping (Bool, Error?) -> Void) {
+        guard let eventId = event.id else {
+            completion(false, NSError(domain: "FirestoreService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Event ID is nil"]))
+            return
+        }
+        
+        do {
+            try db.collection("events").document(eventId).setData(from: event, merge: true) { error in
+                if let error = error {
+                    print("❌ Firestore update error: \(error.localizedDescription)")
+                    completion(false, error)
+                } else {
+                    print("✅ Event updated in Firestore successfully")
+                    completion(true, nil)
+                }
+            }
+        } catch {
+            print("❌ Event encoding error: \(error.localizedDescription)")
+            completion(false, error)
+        }
+    }
+    
+    // NEW: Create a new event - Different name to avoid conflict
+    func saveNewEvent(_ event: Event, completion: @escaping (Bool, Error?) -> Void) {
+        do {
+            let ref = db.collection("events").document()
+            var newEvent = event
+            newEvent.id = ref.documentID
+            
+            print("📝 Creating event in Firestore with imageUrl: \(newEvent.imageUrl ?? "nil")")
+            
+            try ref.setData(from: newEvent) { error in
+                if let error = error {
+                    print("❌ Firestore create error: \(error.localizedDescription)")
+                    completion(false, error)
+                } else {
+                    print("✅ Event created in Firestore successfully")
+                    completion(true, nil)
+                }
+            }
+        } catch {
+            print("❌ Event encoding error: \(error.localizedDescription)")
+            completion(false, error)
+        }
+    }
+    
+    // NEW: Fetch a single event by ID
+    func fetchSingleEvent(eventId: String, completion: @escaping (Event?, Error?) -> Void) {
+        db.collection("events").document(eventId).getDocument { snapshot, error in
+            if let error = error {
+                print("❌ Firestore fetch error: \(error.localizedDescription)")
+                completion(nil, error)
+                return
+            }
+            
+            guard let snapshot = snapshot, snapshot.exists,
+                  let event = try? snapshot.data(as: Event.self) else {
+                print("❌ Event not found or decode error")
+                completion(nil, NSError(domain: "FirestoreService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Event not found"]))
+                return
+            }
+            
+            print("✅ Event fetched successfully")
+            completion(event, nil)
+        }
+    }
+    
+    // NEW: Fetch events for a specific merchant
+    func fetchEventsForMerchant(merchantId: String, completion: @escaping ([Event]?, Error?) -> Void) {
+        db.collection("events")
+            .whereField("merchant_ids", arrayContains: merchantId)
+            .order(by: "start_date", descending: true)
+            .getDocuments { snapshot, error in
+                if let error = error {
+                    print("❌ Failed to fetch merchant events: \(error.localizedDescription)")
+                    completion(nil, error)
+                    return
+                }
+                
+                let events = snapshot?.documents.compactMap { document -> Event? in
+                    try? document.data(as: Event.self)
+                }
+                
+                print("✅ Fetched \(events?.count ?? 0) events for merchant")
+                completion(events, nil)
+            }
+    }
+    
+    // NEW: Delete an event
+    func deleteEvent(eventId: String, completion: @escaping (Bool, Error?) -> Void) {
+        db.collection("events").document(eventId).delete { error in
+            if let error = error {
+                print("❌ Failed to delete event: \(error.localizedDescription)")
+                completion(false, error)
+            } else {
+                print("✅ Event deleted successfully")
+                completion(true, nil)
+            }
+        }
+    }
+    
+    func fetchNearbyEvents(latitude: Double, longitude: Double, radiusInKm: Double, completion: @escaping ([Event]?, Error?) -> Void) {
+        // In a real app, you'd implement a geospatial query here
+        // For simplicity, we'll just fetch all active events for now
+        db.collection("events")
+            .whereField("active", isEqualTo: true)
+            .getDocuments { snapshot, error in
+                if let error = error {
+                    completion(nil, error)
+                    return
+                }
+                
+                let events = snapshot?.documents.compactMap { document -> Event? in
+                    try? document.data(as: Event.self)
+                }
+                
+                // In a real app, you'd filter events by distance here
+                completion(events, nil)
+            }
+    }
     
     // MARK: - Orders
     
@@ -211,27 +440,5 @@ class FirestoreService {
         ]) { error in
             completion(error)
         }
-    }
-    
-    // MARK: - Events
-    
-    func fetchNearbyEvents(latitude: Double, longitude: Double, radiusInKm: Double, completion: @escaping ([Event]?, Error?) -> Void) {
-        // In a real app, you'd implement a geospatial query here
-        // For simplicity, we'll just fetch all active events for now
-        db.collection("events")
-            .whereField("active", isEqualTo: true)
-            .getDocuments { snapshot, error in
-                if let error = error {
-                    completion(nil, error)
-                    return
-                }
-                
-                let events = snapshot?.documents.compactMap { document -> Event? in
-                    try? document.data(as: Event.self)
-                }
-                
-                // In a real app, you'd filter events by distance here
-                completion(events, nil)
-            }
     }
 }

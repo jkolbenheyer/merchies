@@ -1,4 +1,4 @@
-// MerchProductEditView.swift - UPDATED FOR NEW MODELS
+// MerchProductEditView.swift - CORRECTED WITH REAL IMAGE UPLOAD
 import SwiftUI
 import PhotosUI
 import FirebaseFirestore
@@ -17,8 +17,13 @@ struct MerchProductEditView: View {
     @State private var selectedImage: UIImage?
     @State private var isImagePickerPresented = false
     @State private var isCreating = false
+    @State private var isUploadingImage = false
     @State private var showingSuccess = false
     @State private var errorMessage: String?
+    @State private var uploadedImageURL: String?
+    
+    // Image upload service
+    private let imageUploadService = ImageUploadService()
     
     let availableSizes = ["XS", "S", "M", "L", "XL", "XXL"]
     
@@ -37,39 +42,54 @@ struct MerchProductEditView: View {
                 }
                 
                 Section(header: Text("Product Image")) {
-                    HStack {
-                        Spacer()
-                        
-                        if let selectedImage = selectedImage {
-                            Image(uiImage: selectedImage)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(height: 200)
-                                .cornerRadius(10)
-                        } else {
-                            ZStack {
-                                Rectangle()
-                                    .fill(Color.gray.opacity(0.2))
+                    if #available(iOS 14.0, *) {
+                        PhotoPickerView(selectedImage: $selectedImage, title: "Product Image")
+                    } else {
+                        // Fallback for older iOS versions
+                        VStack {
+                            if let selectedImage = selectedImage {
+                                Image(uiImage: selectedImage)
+                                    .resizable()
+                                    .scaledToFit()
                                     .frame(height: 200)
                                     .cornerRadius(10)
-                                
-                                VStack {
-                                    Image(systemName: "photo")
-                                        .font(.system(size: 30))
-                                        .foregroundColor(.gray)
+                            } else {
+                                ZStack {
+                                    Rectangle()
+                                        .fill(Color.gray.opacity(0.2))
+                                        .frame(height: 200)
+                                        .cornerRadius(10)
                                     
-                                    Text("Tap to select image")
-                                        .font(.caption)
-                                        .foregroundColor(.gray)
-                                        .padding(.top, 5)
+                                    VStack {
+                                        Image(systemName: "photo")
+                                            .font(.system(size: 30))
+                                            .foregroundColor(.gray)
+                                        
+                                        Text("Tap to select image")
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                            .padding(.top, 5)
+                                    }
                                 }
                             }
+                            
+                            Button(selectedImage == nil ? "Select Image" : "Change Image") {
+                                isImagePickerPresented = true
+                            }
+                            .font(.subheadline)
+                            .foregroundColor(.cyan)
+                            .padding(.top, 8)
                         }
-                        
-                        Spacer()
                     }
-                    .onTapGesture {
-                        isImagePickerPresented = true
+                    
+                    if isUploadingImage {
+                        HStack {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                            Text("Uploading image...")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
                 
@@ -133,12 +153,17 @@ struct MerchProductEditView: View {
                         createProduct()
                     }
                     .disabled(title.isEmpty || price.isEmpty || selectedSizes.isEmpty ||
-                              isCreating)
+                              isCreating || isUploadingImage)
                     .fontWeight(.semibold)
                 }
             }
             .sheet(isPresented: $isImagePickerPresented) {
-                ImagePickerPlaceholder()
+                if #available(iOS 14.0, *) {
+                    // For iOS 14+, the PhotoPickerView handles this directly
+                    EmptyView()
+                } else {
+                    LegacyImagePickerSheet(selectedImage: $selectedImage, isPresented: $isImagePickerPresented)
+                }
             }
             .alert("Product Created!", isPresented: $showingSuccess) {
                 Button("Done") {
@@ -168,7 +193,7 @@ struct MerchProductEditView: View {
                                 .scaleEffect(1.5)
                                 .progressViewStyle(CircularProgressViewStyle(tint: .cyan))
                             
-                            Text("Creating Product...")
+                            Text(isUploadingImage ? "Uploading image..." : "Creating Product...")
                                 .font(.headline)
                                 .padding(.top)
                         }
@@ -185,9 +210,32 @@ struct MerchProductEditView: View {
         isCreating = true
         errorMessage = nil
         
-        // Use a placeholder image URL for now
-        let mockImageUrl = "https://via.placeholder.com/300x300.png?text=Product+Image"
-        
+        // If there's an image, upload it first
+        if let image = selectedImage {
+            isUploadingImage = true
+            let tempProductId = UUID().uuidString
+            
+            imageUploadService.uploadImage(image, type: .product, id: tempProductId) { result in
+                DispatchQueue.main.async {
+                    self.isUploadingImage = false
+                    
+                    switch result {
+                    case .success(let imageURL):
+                        self.uploadedImageURL = imageURL
+                        self.createProductWithImage(imageURL: imageURL)
+                    case .failure(let error):
+                        self.isCreating = false
+                        self.errorMessage = "Failed to upload image: \(error.localizedDescription)"
+                    }
+                }
+            }
+        } else {
+            // Create product without image (use placeholder)
+            createProductWithImage(imageURL: "https://via.placeholder.com/300x300.png?text=Product+Image")
+        }
+    }
+    
+    private func createProductWithImage(imageURL: String) {
         // Convert inventory values to integers
         var inventory: [String: Int] = [:]
         for (size, value) in inventoryValues {
@@ -201,7 +249,7 @@ struct MerchProductEditView: View {
             price: Double(price) ?? 0.0,
             sizes: selectedSizes,
             inventory: inventory,
-            imageUrl: mockImageUrl,
+            imageUrl: imageURL,
             active: true,
             eventIds: [] // Start with no events assigned
         )
@@ -216,6 +264,11 @@ struct MerchProductEditView: View {
                     
                     if let error = error {
                         self.errorMessage = "Failed to create product: \(error.localizedDescription)"
+                        
+                        // If product creation failed but image was uploaded, clean up the image
+                        if let imageURL = self.uploadedImageURL {
+                            self.imageUploadService.deleteImage(at: imageURL) { _ in }
+                        }
                     } else {
                         self.showingSuccess = true
                     }
@@ -225,65 +278,10 @@ struct MerchProductEditView: View {
             DispatchQueue.main.async {
                 self.isCreating = false
                 self.errorMessage = "Failed to create product: \(error.localizedDescription)"
-            }
-        }
-    }
-}
-
-// MARK: - Image Picker Placeholder
-struct ImagePickerPlaceholder: View {
-    @Environment(\.presentationMode) var presentationMode
-    
-    var body: some View {
-        NavigationView {
-            VStack(spacing: 30) {
-                Image(systemName: "camera.fill")
-                    .font(.system(size: 60))
-                    .foregroundColor(.cyan)
                 
-                Text("Image Picker")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                
-                Text("In a real app, this would open the photo picker or camera to select an image for your product.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-                
-                VStack(spacing: 16) {
-                    Button("Use Sample Image") {
-                        // In the parent view, we set selectedImage = UIImage(systemName: "photo")
-                        // For now, just close the sheet
-                        presentationMode.wrappedValue.dismiss()
-                    }
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.cyan)
-                    .cornerRadius(12)
-                    
-                    Button("Cancel") {
-                        presentationMode.wrappedValue.dismiss()
-                    }
-                    .font(.headline)
-                    .foregroundColor(.cyan)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.cyan.opacity(0.1))
-                    .cornerRadius(12)
-                }
-                .padding(.horizontal, 32)
-            }
-            .padding()
-            .navigationTitle("Select Image")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        presentationMode.wrappedValue.dismiss()
-                    }
+                // Clean up uploaded image if product creation failed
+                if let imageURL = self.uploadedImageURL {
+                    self.imageUploadService.deleteImage(at: imageURL) { _ in }
                 }
             }
         }

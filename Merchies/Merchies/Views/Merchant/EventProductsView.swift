@@ -49,14 +49,14 @@ struct EventProductsView: View {
                 }
             }
             .sheet(isPresented: $showingAddProducts) {
-                AddProductsToEventView(event: event, viewModel: viewModel)
+                OriginalAddProductsToEventView(event: event, viewModel: viewModel)
             }
             .sheet(isPresented: $showingCreateProduct) {
                 // Present the real product‐creation flow
                 MerchProductEditView(bandId: authViewModel.user?.uid ?? "")
                     .environmentObject(authViewModel)
                     .onDisappear {
-                        // When the sheet closes, re-fetch the event’s products
+                        // When the sheet closes, re-fetch the event's products
                         if let id = event.id {
                             viewModel.fetchEventProducts(eventId: id)
                         }
@@ -94,7 +94,7 @@ struct EventProductsView: View {
                 .foregroundColor(.cyan)
             }) {
                 ForEach(viewModel.products) { product in
-                    EventProductCard(
+                    OriginalEventProductCard(
                         product: product,
                         onRemove: {
                             removeProduct(product)
@@ -168,8 +168,8 @@ struct EventProductsView: View {
     }
 }
 
-// MARK: - Event Product Card
-struct EventProductCard: View {
+// MARK: - Original Event Product Card (Renamed to avoid conflicts)
+struct OriginalEventProductCard: View {
     let product: Product
     let onRemove: () -> Void
     @State private var showingRemoveAlert = false
@@ -264,8 +264,8 @@ struct EventProductCard: View {
     }
 }
 
-// MARK: - Add Products to Event View
-struct AddProductsToEventView: View {
+// MARK: - Original Add Products to Event View (Renamed to avoid conflicts)
+struct OriginalAddProductsToEventView: View {
     let event: Event
     @ObservedObject var viewModel: EventProductsViewModel
     @Environment(\.presentationMode) var presentationMode
@@ -282,7 +282,7 @@ struct AddProductsToEventView: View {
                     List {
                         Section(header: Text("Available Products")) {
                             ForEach(viewModel.availableProducts) { product in
-                                SelectableProductRow(
+                                OriginalSelectableProductRow(
                                     product: product,
                                     isSelected: selectedProducts.contains(product.id ?? "")
                                 ) { isSelected in
@@ -390,8 +390,8 @@ struct AddProductsToEventView: View {
     }
 }
 
-// MARK: - Selectable Product Row
-struct SelectableProductRow: View {
+// MARK: - Original Selectable Product Row (Renamed to avoid conflicts)
+struct OriginalSelectableProductRow: View {
     let product: Product
     let isSelected: Bool
     let onSelectionChanged: (Bool) -> Void

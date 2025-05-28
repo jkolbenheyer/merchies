@@ -51,6 +51,7 @@ struct Product: Identifiable, Codable {
     func isAvailableForEvent(_ eventId: String) -> Bool {
         return eventIds.contains(eventId) && active
     }
+    
 }
 
 struct Order: Identifiable, Codable {
