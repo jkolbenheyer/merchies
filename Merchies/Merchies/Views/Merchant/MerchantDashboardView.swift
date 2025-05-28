@@ -18,29 +18,17 @@ struct MerchantDashboardView: View {
     var body: some View {
         NavigationView {
             VStack {
-                // Store status toggle
-                HStack {
-                    Text("Store Status:")
-                        .font(.headline)
-                    Spacer()
-                    Toggle("", isOn: $isStoreActive)
-                        .labelsHidden()
-                        .toggleStyle(SwitchToggleStyle(tint: .cyan))
-                }
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(10)
-                .padding(.horizontal)
+            
                 
                 // Quick Actions Section
                 HStack(spacing: 15) {
                     // Manage Events Button
-                    Button(action: { showingEventsList = true }) {
+                    Button(action: { showingCreateEvent = true }) {
                         VStack(spacing: 8) {
                             Image(systemName: "calendar.badge.plus")
                                 .font(.system(size: 24))
                                 .foregroundColor(.white)
-                            Text("Manage Events")
+                            Text("Add Event")
                                 .font(.caption)
                                 .fontWeight(.medium)
                                 .foregroundColor(.white)
@@ -71,45 +59,7 @@ struct MerchantDashboardView: View {
                 .padding(.horizontal)
                 .padding(.bottom, 10)
                 
-                // Stats Overview Section
-                if !eventViewModel.events.isEmpty || !productViewModel.products.isEmpty {
-                    HStack(spacing: 20) {
-                        VStack {
-                            Text("\(eventViewModel.events.count)")
-                                .font(.title2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.cyan)
-                            Text("Events")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        Divider().frame(height: 30)
-                        VStack {
-                            Text("\(productViewModel.products.count)")
-                                .font(.title2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.cyan)
-                            Text("Products")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        Divider().frame(height: 30)
-                        VStack {
-                            let totalStock = productViewModel.products.reduce(0) { $0 + $1.totalInventory }
-                            Text("\(totalStock)")
-                                .font(.title2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.cyan)
-                            Text("Total Stock")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .padding()
-                    .background(Color.cyan.opacity(0.05))
-                    .cornerRadius(10)
-                    .padding(.horizontal)
-                }
+                
                 
                 if let error = errorMessage {
                     Text(error)
@@ -174,7 +124,7 @@ struct MerchantDashboardView: View {
                     }
                 }
             }
-            .navigationTitle("Your Store")
+            .navigationTitle("Your Stuff")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
