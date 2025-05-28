@@ -160,30 +160,7 @@ struct CreateEventView: View {
                     }
                 }
                 
-                // Optional Event Settings
-                Section(header: Text("Additional Settings (Optional)")) {
-                    HStack {
-                        Text("Max Capacity")
-                        Spacer()
-                        TextField("Optional", text: $maxCapacity)
-                            .keyboardType(.numberPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 100)
-                    }
-                    
-                    HStack {
-                        Text("Ticket Price")
-                        Spacer()
-                        HStack {
-                            Text("$")
-                            TextField("0.00", text: $ticketPrice)
-                                .keyboardType(.decimalPad)
-                                .multilineTextAlignment(.trailing)
-                                .frame(width: 80)
-                        }
-                    }
-                }
-                
+        
                 // Preview Section
                 if !eventName.isEmpty && !venueName.isEmpty && selectedLocation != nil {
                     Section(header: Text("Event Preview")) {
