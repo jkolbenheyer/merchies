@@ -40,6 +40,30 @@ class FirestoreService {
                 }
         }
     }
+    // MARK: - Delete Operations
+
+    func deleteProduct(productId: String, completion: @escaping (Error?) -> Void) {
+        db.collection("products").document(productId).delete { error in
+            if let error = error {
+                print("❌ Failed to delete product: \(error.localizedDescription)")
+            } else {
+                print("✅ Product deleted successfully")
+            }
+            completion(error)
+        }
+    }
+
+    func deleteEvent(eventId: String, completion: @escaping (Error?) -> Void) {
+        db.collection("events").document(eventId).delete { error in
+            if let error = error {
+                print("❌ Failed to delete event: \(error.localizedDescription)")
+            } else {
+                print("✅ Event deleted successfully")
+            }
+            completion(error)
+        }
+    }
+
     
     // NEW: Fetch products directly for a band/merchant
     func fetchProductsForBand(bandId: String, completion: @escaping ([Product]?, Error?) -> Void) {
@@ -442,5 +466,3 @@ class FirestoreService {
         }
     }
 }
-
-

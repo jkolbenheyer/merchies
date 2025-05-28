@@ -24,7 +24,7 @@ class ProductViewModel: ObservableObject {
             }
         }
     }
-    
+
     func addProduct(_ product: Product, completion: @escaping (Bool) -> Void) {
         isLoading = true
         
@@ -38,7 +38,6 @@ class ProductViewModel: ObservableObject {
                     return
                 }
                 
-                // Successfully added product — only unwrap `id`, since `product` is non-optional
                 if let id = id {
                     var newProduct = product
                     newProduct.id = id
@@ -49,5 +48,18 @@ class ProductViewModel: ObservableObject {
             }
         }
     }
-    
+
+    func deleteProduct(_ productId: String, completion: @escaping (Bool) -> Void) {
+        firestoreService.deleteProduct(productId: productId) { [weak self] error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    self?.error = error.localizedDescription
+                    completion(false)
+                } else {
+                    self?.products.removeAll { $0.id == productId }
+                    completion(true)
+                }
+            }
+        }
+    }
 }

@@ -40,6 +40,10 @@ struct EditEventView: View {
 
     // UI state
     @State private var showingSuccess = false
+    
+    // Delete functionality
+    @State private var showingDeleteAlert = false
+    @State private var isDeleting = false
 
     var body: some View {
         NavigationView {
@@ -65,10 +69,21 @@ struct EditEventView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { presentationMode.wrappedValue.dismiss() }
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save", action: saveEvent)
-                        .disabled(!isFormValid || vm.isLoading || isUploadingImage)
-                        .fontWeight(.semibold)
+                
+                ToolbarItem(placement: .primaryAction) {
+                    HStack(spacing: 12) {
+                        // Delete button
+                        Button(action: { showingDeleteAlert = true }) {
+                            Image(systemName: "trash")
+                                .foregroundColor(.red)
+                        }
+                        .disabled(isDeleting || vm.isLoading || isUploadingImage)
+                        
+                        // Save button
+                        Button("Save", action: saveEvent)
+                            .disabled(!isFormValid || vm.isLoading || isUploadingImage || isDeleting)
+                            .fontWeight(.semibold)
+                    }
                 }
             }
             .sheet(isPresented: $showingLocationPicker) {
@@ -94,10 +109,18 @@ struct EditEventView: View {
             } message: {
                 Text("Your changes have been saved.")
             }
+            .alert("Delete Event", isPresented: $showingDeleteAlert) {
+                Button("Cancel", role: .cancel) {}
+                Button("Delete", role: .destructive) {
+                    deleteEvent()
+                }
+            } message: {
+                Text("Are you sure you want to delete '\(vm.event.name)'? This action cannot be undone and will remove all associated products from this event.")
+            }
             .overlay {
-                if vm.isLoading || isUploadingImage {
+                if vm.isLoading || isUploadingImage || isDeleting {
                     Color.black.opacity(0.3).ignoresSafeArea()
-                    ProgressView(isUploadingImage ? "Uploading Image…" : "Saving…")
+                    ProgressView(loadingMessage)
                         .progressViewStyle(CircularProgressViewStyle(tint: .purple))
                         .scaleEffect(1.5)
                 }
@@ -108,6 +131,12 @@ struct EditEventView: View {
                 loadEventImageIfNeeded()
             }
         }
+    }
+    
+    private var loadingMessage: String {
+        if isDeleting { return "Deleting Event…" }
+        if isUploadingImage { return "Uploading Image…" }
+        return "Saving…"
     }
 
     @ViewBuilder
@@ -316,6 +345,25 @@ struct EditEventView: View {
                     )
                 }
             }
+            
+            // Danger Zone Section
+            Section {
+                Button(action: { showingDeleteAlert = true }) {
+                    HStack {
+                        Image(systemName: "trash")
+                        Text("Delete Event")
+                    }
+                    .foregroundColor(.red)
+                    .frame(maxWidth: .infinity)
+                }
+                .disabled(isDeleting || vm.isLoading || isUploadingImage)
+            } header: {
+                Text("Danger Zone")
+            } footer: {
+                Text("Deleting an event will remove it permanently and unlink all associated products. This action cannot be undone.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
     }
 
@@ -358,6 +406,35 @@ struct EditEventView: View {
         }
         .id(refreshTrigger)
         .refreshable { loadEventProducts() }
+    }
+
+    // MARK: - Delete Event
+    
+    private func deleteEvent() {
+        guard let eventId = vm.event.id else {
+            print("❌ Cannot delete event - missing ID")
+            return
+        }
+        
+        isDeleting = true
+        
+        let firestoreService = FirestoreService()
+        firestoreService.deleteEvent(eventId: eventId) { error in
+            DispatchQueue.main.async {
+                self.isDeleting = false
+                
+                if let error = error {
+                    print("❌ Failed to delete event: \(error.localizedDescription)")
+                    // You could show an error alert here if desired
+                } else {
+                    print("✅ Event deleted successfully")
+                    // Provide haptic feedback
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    // Close the view
+                    self.presentationMode.wrappedValue.dismiss()
+                }
+            }
+        }
     }
 
     // MARK: Image Handling
@@ -1124,7 +1201,7 @@ struct EditEventSelectableProductRow: View {
 
 struct EditEventCreateProductView: View {
     @Environment(\.presentationMode) var presentationMode
-
+    
     var body: some View {
         NavigationView {
             VStack(spacing: 20) {
