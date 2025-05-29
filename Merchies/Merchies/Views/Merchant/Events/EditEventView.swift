@@ -59,7 +59,7 @@ struct EditEventView: View {
                 productsForm()
                     .tabItem {
                         Image(systemName: "tag")
-                        Text(AppConstants.Firebase.productsCollection)
+                        Text("Products")
                     }
                     .tag(1)
             }
@@ -174,7 +174,7 @@ struct EditEventView: View {
                             .resizable()
                             .scaledToFit()
                             .frame(height: 200)
-                            .cornerRadius(AppConstants.UI.standardCornerRadius)
+                            .cornerRadius(12)
                         if uploadedImageUrl != nil {
                             HStack {
                                 Image(systemName: "checkmark.circle.fill")
@@ -200,7 +200,7 @@ struct EditEventView: View {
                             .resizable()
                             .scaledToFit()
                             .frame(height: 200)
-                            .cornerRadius(AppConstants.UI.standardCornerRadius)
+                            .cornerRadius(12)
                         
                         HStack {
                             Text("Current event image")
@@ -219,7 +219,7 @@ struct EditEventView: View {
                         Rectangle()
                             .fill(Color.gray.opacity(0.2))
                             .frame(height: 200)
-                            .cornerRadius(AppConstants.UI.standardCornerRadius)
+                            .cornerRadius(12)
                             .overlay(
                                 VStack {
                                     ProgressView()
@@ -237,7 +237,7 @@ struct EditEventView: View {
                         Rectangle()
                             .fill(Color.gray.opacity(0.2))
                             .frame(height: 200)
-                            .cornerRadius(AppConstants.UI.standardCornerRadius)
+                            .cornerRadius(12)
                             .overlay(
                                 VStack {
                                     Image(systemName: "exclamationmark.triangle")
@@ -329,7 +329,7 @@ struct EditEventView: View {
                         }
                     }
                     .frame(height: 150)
-                    .cornerRadius(AppConstants.UI.standardCornerRadius)
+                    .cornerRadius(12)
                     .disabled(true)
                 }
             }
@@ -752,7 +752,7 @@ struct EditEventLocationSearchBar: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 8)
             .background(Color(.systemGray6))
-            .cornerRadius(AppConstants.UI.standardCornerRadius)
+            .cornerRadius(12)
 
             if !text.isEmpty {
                 Button("Search") { onSearchButtonClicked() }
@@ -777,7 +777,7 @@ struct EditEventPreviewCard: View {
                     .resizable()
                     .aspectRatio(contentMode: .fill)
                     .frame(height: 120)
-                    .cornerRadius(AppConstants.UI.standardCornerRadius)
+                    .cornerRadius(12)
                     .clipped()
             }
 
@@ -803,7 +803,7 @@ struct EditEventPreviewCard: View {
         }
         .padding()
         .background(Color.purple.opacity(0.1))
-        .cornerRadius(AppConstants.UI.standardCornerRadius)
+        .cornerRadius(16)
     }
 
     private func formatDateRange(start: Date, end: Date) -> String {
@@ -837,19 +837,19 @@ struct EditEventProductRow: View {
                         .resizable()
                         .aspectRatio(contentMode: .fill)
                         .frame(width: 50, height: 50)
-                        .cornerRadius(AppConstants.UI.standardCornerRadius)
+                        .cornerRadius(12)
                         .clipped()
                 } else if isLoadingProductImage {
                     Rectangle()
                         .fill(Color.gray.opacity(0.2))
                         .frame(width: 50, height: 50)
-                        .cornerRadius(AppConstants.UI.standardCornerRadius)
+                        .cornerRadius(12)
                         .overlay(ProgressView().scaleEffect(0.8))
                 } else {
                     Rectangle()
                         .fill(Color.gray.opacity(0.2))
                         .frame(width: 50, height: 50)
-                        .cornerRadius(AppConstants.UI.standardCornerRadius)
+                        .cornerRadius(12)
                         .overlay(Image(systemName: "photo").foregroundColor(.gray))
                 }
             }
@@ -984,7 +984,7 @@ struct EditEventEmptyProductsState: View {
                         .frame(maxWidth: .infinity)
                         .padding()
                         .background(Color.purple)
-                        .cornerRadius(AppConstants.UI.cardCornerRadius)
+                        .cornerRadius(16)
                 }
 
                 Button(action: { showingCreateProduct = true }) {
@@ -994,7 +994,7 @@ struct EditEventEmptyProductsState: View {
                         .frame(maxWidth: .infinity)
                         .padding()
                         .background(Color.purple.opacity(0.1))
-                        .cornerRadius(AppConstants.UI.cardCornerRadius)
+                        .cornerRadius(16)
                 }
             }
             .padding(.horizontal, 24)

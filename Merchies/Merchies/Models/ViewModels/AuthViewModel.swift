@@ -1,4 +1,4 @@
-// AuthViewModel.swift
+// Models/ViewModels/AuthViewModel.swift
 import Foundation
 import Firebase
 import FirebaseAuth
@@ -9,7 +9,6 @@ enum AuthState {
     case signedIn
     case signedOut
 }
-
 
 class AuthViewModel: ObservableObject {
     @Published var user: User?
@@ -25,7 +24,7 @@ class AuthViewModel: ObservableObject {
     }
     
     func setupAuthListener() {
-        handle = Auth.auth().addStateDidChangeListener { auth, user in
+        handle = Auth.auth().addStateDidChangeListener { (auth: Auth, user: User?) in
             self.user = user
             self.authState = user != nil ? .signedIn : .signedOut
             
@@ -39,7 +38,7 @@ class AuthViewModel: ObservableObject {
         isLoading = true
         let db = Firestore.firestore()
         
-        db.collection(AppConstants.Firebase.usersCollection).document(userId).getDocument { document, error in
+        db.collection("users").document(userId).getDocument { (document: DocumentSnapshot?, error: Error?) in
             self.isLoading = false
             
             if let error = error {
@@ -55,10 +54,10 @@ class AuthViewModel: ObservableObject {
                 // Default to fan role
                 self.userRole = .fan
                 // Create user document if it doesn't exist
-                db.collection(AppConstants.Firebase.usersCollection).document(userId).setData([
+                db.collection("users").document(userId).setData([
                     "role": UserRole.fan.rawValue,
                     "createdAt": Timestamp(date: Date())
-                ]) { error in
+                ]) { (error: Error?) in
                     if let error = error {
                         self.error = "Error creating user profile: \(error.localizedDescription)"
                     }
@@ -71,7 +70,7 @@ class AuthViewModel: ObservableObject {
         isLoading = true
         error = nil
         
-        Auth.auth().signIn(withEmail: email, password: password) { result, error in
+        Auth.auth().signIn(withEmail: email, password: password) { (result: AuthDataResult?, error: Error?) in
             self.isLoading = false
             
             if let error = error {
@@ -90,7 +89,7 @@ class AuthViewModel: ObservableObject {
         isLoading = true
         error = nil
         
-        Auth.auth().createUser(withEmail: email, password: password) { result, error in
+        Auth.auth().createUser(withEmail: email, password: password) { (result: AuthDataResult?, error: Error?) in
             self.isLoading = false
             
             if let error = error {
@@ -101,11 +100,11 @@ class AuthViewModel: ObservableObject {
             // User created successfully, now create their profile
             if let user = result?.user {
                 let db = Firestore.firestore()
-                db.collection(AppConstants.Firebase.usersCollection).document(user.uid).setData([
+                db.collection("users").document(user.uid).setData([
                     "email": email,
                     "role": UserRole.fan.rawValue,
                     "createdAt": Timestamp(date: Date())
-                ]) { error in
+                ]) { (error: Error?) in
                     if let error = error {
                         self.error = "Error creating user profile: \(error.localizedDescription)"
                     }
@@ -114,11 +113,11 @@ class AuthViewModel: ObservableObject {
         }
     }
     
-    func sendPasswordReset(email: String, completion: @escaping (Bool) -> Void) {
+    func sendPasswordReset(email: String, completion: @escaping (_ success: Bool) -> Void) {
         isLoading = true
         error = nil
         
-        Auth.auth().sendPasswordReset(withEmail: email) { error in
+        Auth.auth().sendPasswordReset(withEmail: email) { (error: Error?) in
             self.isLoading = false
             
             if let error = error {

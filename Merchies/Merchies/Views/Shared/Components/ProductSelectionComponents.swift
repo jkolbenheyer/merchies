@@ -99,20 +99,20 @@ struct EventProductCard: View {
                     Rectangle()
                         .fill(Color.gray.opacity(0.2))
                         .frame(width: 60, height: 60)
-                        .cornerRadius(AppConstants.UI.standardCornerRadius)
+                        .cornerRadius(8)
                         .overlay(ProgressView().scaleEffect(0.8))
                 case .success(let image):
                     image
                         .resizable()
                         .aspectRatio(contentMode: .fill)
                         .frame(width: 60, height: 60)
-                        .cornerRadius(AppConstants.UI.standardCornerRadius)
+                        .cornerRadius(8)
                         .clipped()
                 case .failure:
                     Rectangle()
                         .fill(Color.gray.opacity(0.2))
                         .frame(width: 60, height: 60)
-                        .cornerRadius(AppConstants.UI.standardCornerRadius)
+                        .cornerRadius(8)
                         .overlay(
                             Image(systemName: "photo")
                                 .foregroundColor(.gray)
@@ -209,12 +209,12 @@ struct ProductDetailSheet: View {
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
                                 .frame(maxHeight: 300)
-                                .cornerRadius(AppConstants.UI.cardCornerRadius)
+                                .cornerRadius(12)
                         default:
                             Rectangle()
                                 .fill(Color.gray.opacity(0.2))
                                 .frame(height: 300)
-                                .cornerRadius(AppConstants.UI.cardCornerRadius)
+                                .cornerRadius(12)
                                 .overlay(
                                     Image(systemName: "photo")
                                         .font(.system(size: 40))
@@ -248,7 +248,7 @@ struct ProductDetailSheet: View {
                                 .padding(.vertical, 4)
                                 .background(product.active ? Color.green.opacity(0.2) : Color.orange.opacity(0.2))
                                 .foregroundColor(product.active ? .green : .orange)
-                                .cornerRadius(AppConstants.UI.standardCornerRadius)
+                                .cornerRadius(8)
                         }
                         
                         // Sizes and Inventory
@@ -276,7 +276,7 @@ struct ProductDetailSheet: View {
                             }
                             .padding()
                             .background(Color(.systemGray6))
-                            .cornerRadius(AppConstants.UI.cardCornerRadius)
+                            .cornerRadius(12)
                         }
                         
                         // Total Inventory
@@ -293,7 +293,7 @@ struct ProductDetailSheet: View {
                         }
                         .padding()
                         .background(Color(.systemGray6))
-                        .cornerRadius(AppConstants.UI.cardCornerRadius)
+                        .cornerRadius(12)
                     }
                     .padding(.horizontal)
                 }
@@ -329,13 +329,13 @@ struct ProductGridItem: View {
                             .resizable()
                             .aspectRatio(contentMode: .fill)
                             .frame(width: 120, height: 120)
-                            .cornerRadius(AppConstants.UI.cardCornerRadius)
+                            .cornerRadius(12)
                             .clipped()
                     default:
                         Rectangle()
                             .fill(Color.gray.opacity(0.2))
                             .frame(width: 120, height: 120)
-                            .cornerRadius(AppConstants.UI.cardCornerRadius)
+                            .cornerRadius(12)
                             .overlay(
                                 Image(systemName: "photo")
                                     .foregroundColor(.gray)
@@ -395,7 +395,7 @@ struct QuickAddProductButton: View {
             }
             .frame(width: 120, height: 120)
             .background(Color.purple.opacity(0.1))
-            .cornerRadius(AppConstants.UI.cardCornerRadius)
+            .cornerRadius(12)
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
                     .stroke(Color.purple.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [5]))
@@ -443,7 +443,7 @@ struct ProductSummaryCard: View {
         }
         .padding()
         .background(Color(.systemGray6))
-        .cornerRadius(AppConstants.UI.cardCornerRadius)
+        .cornerRadius(12)
     }
 }
 

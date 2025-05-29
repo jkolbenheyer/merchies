@@ -32,7 +32,7 @@ struct OrderConfirmationView: View {
                         .font(.body)
                         .padding()
                         .background(Color.gray.opacity(0.1))
-                        .cornerRadius(AppConstants.UI.standardCornerRadius)
+                        .cornerRadius(8)
                 }
                 .padding()
             }

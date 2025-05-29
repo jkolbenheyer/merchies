@@ -217,23 +217,23 @@ struct MerchantDashboardView: View {
         loadMerchantProducts()
     }
     func loadMerchantProducts() {
-        guard let user = authViewModel.user else { errorMessage = "User not logged in"; return }
-        let db = Firestore.firestore()
-        productViewModel.isLoading = true
-        db.collection(AppConstants.Firebase.productsCollection).whereField(AppConstants.Firebase.bandIdField, isEqualTo: user.uid)
-            .getDocuments { snapshot, error in
-                DispatchQueue.main.async {
-                    productViewModel.isLoading = false
-                    if let error = error {
-                        errorMessage = "Error fetching products: \(error.localizedDescription)"
-                        return
+            guard let user = authViewModel.user else { errorMessage = "User not logged in"; return }
+            let db = Firestore.firestore()
+            productViewModel.isLoading = true
+            db.collection("products").whereField("band_id", isEqualTo: user.uid)
+                .getDocuments { snapshot, error in
+                    DispatchQueue.main.async {
+                        self.productViewModel.isLoading = false
+                        if let error = error {
+                            self.errorMessage = "Error fetching products: \(error.localizedDescription)"
+                            return
+                        }
+                        self.productViewModel.products = snapshot?.documents.compactMap {
+                            try? $0.data(as: Product.self)
+                        } ?? []
                     }
-                    productViewModel.products = snapshot?.documents.compactMap {
-                        try? $0.data(as: Product.self)
-                    } ?? []
                 }
-            }
-    }
+        }
 }
 
 // MARK: - Enhanced Event Row with Safe Firebase Storage Loading
@@ -251,13 +251,13 @@ struct EnhancedEventRow: View {
                         .resizable()
                         .aspectRatio(contentMode: .fill)
                         .frame(width: 60, height: 60)
-                        .cornerRadius(AppConstants.UI.standardCornerRadius)
+                        .cornerRadius(8)
                         .clipped()
                 } else if isLoadingEventImage {
                     Rectangle()
                         .fill(Color.gray.opacity(0.2))
                         .frame(width: 60, height: 60)
-                        .cornerRadius(AppConstants.UI.standardCornerRadius)
+                        .cornerRadius(8)
                         .overlay(
                             ProgressView()
                                 .scaleEffect(0.8)
@@ -266,7 +266,7 @@ struct EnhancedEventRow: View {
                     Rectangle()
                         .fill(Color.gray.opacity(0.2))
                         .frame(width: 60, height: 60)
-                        .cornerRadius(AppConstants.UI.standardCornerRadius)
+                        .cornerRadius(8)
                         .overlay(
                             Image(systemName: "calendar")
                                 .font(.title3)
@@ -410,19 +410,19 @@ struct ProductRow: View {
                             .resizable()
                             .aspectRatio(contentMode: .fill)
                             .frame(width: 50, height: 50)
-                            .cornerRadius(AppConstants.UI.standardCornerRadius)
+                            .cornerRadius(8)
                             .clipped()
                     } else if isLoadingProductImage {
                         Rectangle()
                             .fill(Color.gray.opacity(0.2))
                             .frame(width: 50, height: 50)
-                            .cornerRadius(AppConstants.UI.standardCornerRadius)
+                            .cornerRadius(8)
                             .overlay(ProgressView().scaleEffect(0.7))
                     } else {
                         Rectangle()
                             .fill(Color.gray.opacity(0.2))
                             .frame(width: 50, height: 50)
-                            .cornerRadius(AppConstants.UI.standardCornerRadius)
+                            .cornerRadius(8)
                             .overlay(
                                 Image(systemName: "photo")
                                     .foregroundColor(.gray)

@@ -260,7 +260,7 @@ struct MerchProductEditView: View {
         let db = Firestore.firestore()
         
         do {
-            let _ = try db.collection(AppConstants.Firebase.productsCollection).addDocument(from: newProduct) { error in
+            let _ = try db.collection("products").addDocument(from: newProduct) { error in
                 DispatchQueue.main.async {
                     self.isCreating = false
                     

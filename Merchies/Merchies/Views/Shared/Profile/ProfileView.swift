@@ -28,7 +28,7 @@ struct ProfileView: View {
                         .frame(width: 200)
                         .padding()
                         .background(Color.red)
-                        .cornerRadius(AppConstants.UI.standardCornerRadius)
+                        .cornerRadius(8)
                 }
                 .padding(.bottom, 50)
             }
@@ -36,8 +36,3 @@ struct ProfileView: View {
         }
     }
 }
-
-
-
-
-

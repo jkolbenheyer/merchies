@@ -86,7 +86,7 @@ struct EnhancedEventListRow: View {
                     Rectangle()
                         .fill(Color.gray.opacity(0.2))
                         .frame(width: 80, height: 80)
-                        .cornerRadius(AppConstants.UI.standardCornerRadius)
+                        .cornerRadius(8)
                         .overlay(
                             ProgressView()
                                 .scaleEffect(0.8)
@@ -96,13 +96,13 @@ struct EnhancedEventListRow: View {
                         .resizable()
                         .aspectRatio(contentMode: .fill)
                         .frame(width: 80, height: 80)
-                        .cornerRadius(AppConstants.UI.standardCornerRadius)
+                        .cornerRadius(8)
                         .clipped()
                 case .failure:
                     Rectangle()
                         .fill(Color.gray.opacity(0.2))
                         .frame(width: 80, height: 80)
-                        .cornerRadius(AppConstants.UI.standardCornerRadius)
+                        .cornerRadius(8)
                         .overlay(
                             Image(systemName: "calendar")
                                 .font(.title2)
@@ -112,7 +112,7 @@ struct EnhancedEventListRow: View {
                     Rectangle()
                         .fill(Color.gray.opacity(0.2))
                         .frame(width: 80, height: 80)
-                        .cornerRadius(AppConstants.UI.standardCornerRadius)
+                        .cornerRadius(8)
                 }
             }
             
@@ -194,7 +194,7 @@ struct EmptyEventsView: View {
                 .frame(maxWidth: .infinity)
                 .padding()
                 .background(Color.cyan)
-                .cornerRadius(AppConstants.UI.cardCornerRadius)
+                .cornerRadius(12)
             }
             .padding(.horizontal, 32)
         }
@@ -304,7 +304,7 @@ struct EventCardView: View {
         }
         .buttonStyle(PlainButtonStyle())
         .background(Color(UIColor.systemBackground))
-        .cornerRadius(AppConstants.UI.cardCornerRadius)
+        .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
 }

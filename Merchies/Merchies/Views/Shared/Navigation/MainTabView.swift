@@ -12,57 +12,57 @@ struct MainTabView: View {
                     .tabItem {
                         Label("Discover", systemImage: "music.note")
                     }
-                    .environmentObject(authViewModel) // Add this line
+                    .environmentObject(authViewModel)
                 
                 OrderHistoryView()
                     .tabItem {
-                        Label(AppConstants.Firebase.ordersCollection, systemImage: "bag")
+                        Label("Orders", systemImage: "bag")
                     }
-                    .environmentObject(authViewModel) // Add this line
+                    .environmentObject(authViewModel)
                 
                 ProfileView()
                     .tabItem {
                         Label("Profile", systemImage: "person")
                     }
-                    .environmentObject(authViewModel) // Add this line
+                    .environmentObject(authViewModel)
                 
             case .merchant:
                 MerchantDashboardView()
                     .tabItem {
                         Label("Store", systemImage: "tag")
                     }
-                    .environmentObject(authViewModel) // Add this line
+                    .environmentObject(authViewModel)
                 
                 OrderScannerView()
                     .tabItem {
                         Label("Scan", systemImage: "qrcode.viewfinder")
                     }
-                    .environmentObject(authViewModel) // Add this line
+                    .environmentObject(authViewModel)
                 
                 MerchantSettingsView()
                     .tabItem {
                         Label("Settings", systemImage: "gear")
                     }
-                    .environmentObject(authViewModel) // Add this line
+                    .environmentObject(authViewModel)
                 
             case .admin, .superAdmin:
                 AdminDashboardView()
                     .tabItem {
                         Label("Dashboard", systemImage: "chart.bar")
                     }
-                    .environmentObject(authViewModel) // Add this line
+                    .environmentObject(authViewModel)
                 
                 UserManagementView()
                     .tabItem {
-                        Label(AppConstants.Firebase.usersCollection, systemImage: "person.2")
+                        Label("Users", systemImage: "person.2")
                     }
-                    .environmentObject(authViewModel) // Add this line
+                    .environmentObject(authViewModel)
                 
                 SettingsView()
                     .tabItem {
                         Label("Settings", systemImage: "gear")
                     }
-                    .environmentObject(authViewModel) // Add this line
+                    .environmentObject(authViewModel)
             }
         }
     }

@@ -25,7 +25,7 @@ struct ProductCardView: View {
         }
         .padding()
         .background(Color(UIColor.systemBackground))
-        .cornerRadius(AppConstants.UI.cardCornerRadius)
+        .cornerRadius(8)
     }
 
     @ViewBuilder
@@ -37,7 +37,7 @@ struct ProductCardView: View {
                     image
                         .resizable()
                         .aspectRatio(1, contentMode: .fill)
-                        .cornerRadius(AppConstants.UI.standardCornerRadius)
+                        .cornerRadius(8)
                 } else {
                     ZStack {
                         Rectangle()
@@ -47,7 +47,7 @@ struct ProductCardView: View {
                             .foregroundColor(.gray)
                     }
                     .aspectRatio(1, contentMode: .fit)
-                    .cornerRadius(AppConstants.UI.standardCornerRadius)
+                    .cornerRadius(8)
                 }
             }
         } else {
@@ -59,7 +59,7 @@ struct ProductCardView: View {
                     .foregroundColor(.gray)
             }
             .aspectRatio(1, contentMode: .fit)
-            .cornerRadius(AppConstants.UI.standardCornerRadius)
+            .cornerRadius(8)
         }
     }
 

@@ -57,7 +57,7 @@ struct PhotoPickerView: View {
                     .resizable()
                     .scaledToFit()
                     .frame(maxHeight: 300)
-                    .cornerRadius(AppConstants.UI.cardCornerRadius)
+                    .cornerRadius(12)
                     .shadow(radius: 4)
             } else {
                 RoundedRectangle(cornerRadius: 12)
@@ -90,7 +90,7 @@ struct PhotoPickerView: View {
                 .frame(maxWidth: .infinity)
                 .padding()
                 .background(Color.cyan)
-                .cornerRadius(AppConstants.UI.cardCornerRadius)
+                .cornerRadius(12)
             }
             .onChange(of: selectedItem) { newItem in
                 Task {
@@ -148,7 +148,7 @@ struct LegacyImagePickerSheet: View {
                         .frame(maxWidth: .infinity)
                         .padding()
                         .background(Color.cyan)
-                        .cornerRadius(AppConstants.UI.cardCornerRadius)
+                        .cornerRadius(12)
                     }
                     .disabled(!UIImagePickerController.isSourceTypeAvailable(.camera))
                     
@@ -165,7 +165,7 @@ struct LegacyImagePickerSheet: View {
                         .frame(maxWidth: .infinity)
                         .padding()
                         .background(Color.cyan.opacity(0.1))
-                        .cornerRadius(AppConstants.UI.cardCornerRadius)
+                        .cornerRadius(12)
                     }
                     
                     Button("Cancel") {
@@ -176,7 +176,7 @@ struct LegacyImagePickerSheet: View {
                     .frame(maxWidth: .infinity)
                     .padding()
                     .background(Color.gray.opacity(0.1))
-                    .cornerRadius(AppConstants.UI.cardCornerRadius)
+                    .cornerRadius(12)
                 }
                 .padding(.horizontal, 32)
             }

@@ -15,7 +15,7 @@ struct OrderHistoryView: View {
                     .foregroundColor(.gray)
                 Spacer()
             }
-            .navigationTitle(AppConstants.Firebase.ordersCollection)
+            .navigationTitle("Orders")
         }
     }
 }

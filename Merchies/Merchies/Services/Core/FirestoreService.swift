@@ -10,7 +10,7 @@ class FirestoreService {
     // Fetch products for an event
     func fetchProducts(for eventId: String, completion: @escaping ([Product]?, Error?) -> Void) {
         // First get bands for this event
-        db.collection(AppConstants.Firebase.eventsCollection).document(eventId).getDocument { snapshot, error in
+        db.collection("events").document(eventId).getDocument { snapshot, error in
             if let error = error {
                 completion(nil, error)
                 return
@@ -23,8 +23,8 @@ class FirestoreService {
             }
             
             // Then get products for these merchants
-            self.db.collection(AppConstants.Firebase.productsCollection)
-                .whereField(AppConstants.Firebase.bandIdField, in: merchantIds)
+            self.db.collection("products")
+                .whereField("band_id", in: merchantIds)
                 .whereField("active", isEqualTo: true)
                 .getDocuments { snapshot, error in
                     if let error = error {
@@ -43,7 +43,7 @@ class FirestoreService {
     // MARK: - Delete Operations
 
     func deleteProduct(productId: String, completion: @escaping (Error?) -> Void) {
-        db.collection(AppConstants.Firebase.productsCollection).document(productId).delete { error in
+        db.collection("products").document(productId).delete { error in
             if let error = error {
                 print("❌ Failed to delete product: \(error.localizedDescription)")
             } else {
@@ -54,7 +54,7 @@ class FirestoreService {
     }
 
     func deleteEvent(eventId: String, completion: @escaping (Error?) -> Void) {
-        db.collection(AppConstants.Firebase.eventsCollection).document(eventId).delete { error in
+        db.collection("events").document(eventId).delete { error in
             if let error = error {
                 print("❌ Failed to delete event: \(error.localizedDescription)")
             } else {
@@ -67,8 +67,8 @@ class FirestoreService {
     
     // NEW: Fetch products directly for a band/merchant
     func fetchProductsForBand(bandId: String, completion: @escaping ([Product]?, Error?) -> Void) {
-        db.collection(AppConstants.Firebase.productsCollection)
-            .whereField(AppConstants.Firebase.bandIdField, isEqualTo: bandId)
+        db.collection("products")
+            .whereField("band_id", isEqualTo: bandId)
             .getDocuments { snapshot, error in
                 if let error = error {
                     completion(nil, error)
@@ -91,8 +91,8 @@ class FirestoreService {
             return
         }
         
-        db.collection(AppConstants.Firebase.productsCollection)
-            .whereField(AppConstants.Firebase.bandIdField, in: bandIds)
+        db.collection("products")
+            .whereField("band_id", in: bandIds)
             .getDocuments { snapshot, error in
                 if let error = error {
                     completion(nil, error)
@@ -109,7 +109,7 @@ class FirestoreService {
     
     // Get user's band IDs
     func getUserBandIds(userId: String, completion: @escaping ([String]?, Error?) -> Void) {
-        db.collection(AppConstants.Firebase.usersCollection).document(userId).getDocument { snapshot, error in
+        db.collection("users").document(userId).getDocument { snapshot, error in
             if let error = error {
                 completion(nil, error)
                 return
@@ -140,7 +140,7 @@ class FirestoreService {
     
     func createProduct(_ product: Product, completion: @escaping (String?, Error?) -> Void) {
         do {
-            let ref = db.collection(AppConstants.Firebase.productsCollection).document()
+            let ref = db.collection("products").document()
             var newProduct = product
             newProduct.id = ref.documentID
             
@@ -158,8 +158,8 @@ class FirestoreService {
     
     // NEW: Fetch products for a specific event (using event_ids field) - Different name to avoid conflict
     func fetchProductsForEvent(eventId: String, completion: @escaping ([Product]?, Error?) -> Void) {
-        db.collection(AppConstants.Firebase.productsCollection)
-            .whereField(AppConstants.Firebase.eventIdsField, arrayContains: eventId)
+        db.collection("products")
+            .whereField("event_ids", arrayContains: eventId)
             .whereField("active", isEqualTo: true)
             .getDocuments { snapshot, error in
                 if let error = error {
@@ -179,8 +179,8 @@ class FirestoreService {
     
     // NEW: Fetch available products for a merchant (excluding those already in event)
     func fetchAvailableProductsForMerchant(merchantId: String, excludingEventId: String?, completion: @escaping ([Product]?, Error?) -> Void) {
-        db.collection(AppConstants.Firebase.productsCollection)
-            .whereField(AppConstants.Firebase.bandIdField, isEqualTo: merchantId)
+        db.collection("products")
+            .whereField("band_id", isEqualTo: merchantId)
             .whereField("active", isEqualTo: true)
             .getDocuments { snapshot, error in
                 if let error = error {
@@ -211,15 +211,15 @@ class FirestoreService {
         let batch = db.batch()
         
         // Update event's product list
-        let eventRef = db.collection(AppConstants.Firebase.eventsCollection).document(eventId)
+        let eventRef = db.collection("events").document(eventId)
         batch.updateData([
             "product_ids": FieldValue.arrayUnion([productId])
         ], forDocument: eventRef)
         
         // Update product's event list
-        let productRef = db.collection(AppConstants.Firebase.productsCollection).document(productId)
+        let productRef = db.collection("products").document(productId)
         batch.updateData([
-            AppConstants.Firebase.eventIdsField: FieldValue.arrayUnion([eventId])
+            "event_ids": FieldValue.arrayUnion([eventId])
         ], forDocument: productRef)
         
         // Commit the batch
@@ -240,15 +240,15 @@ class FirestoreService {
         let batch = db.batch()
         
         // Update event's product list
-        let eventRef = db.collection(AppConstants.Firebase.eventsCollection).document(eventId)
+        let eventRef = db.collection("events").document(eventId)
         batch.updateData([
             "product_ids": FieldValue.arrayRemove([productId])
         ], forDocument: eventRef)
         
         // Update product's event list
-        let productRef = db.collection(AppConstants.Firebase.productsCollection).document(productId)
+        let productRef = db.collection("products").document(productId)
         batch.updateData([
-            AppConstants.Firebase.eventIdsField: FieldValue.arrayRemove([eventId])
+            "event_ids": FieldValue.arrayRemove([eventId])
         ], forDocument: productRef)
         
         // Commit the batch
@@ -272,7 +272,7 @@ class FirestoreService {
             return
         }
         do {
-            let ref = db.collection(AppConstants.Firebase.eventsCollection).document(id)
+            let ref = db.collection("events").document(id)
             try ref.setData(from: event, merge: true, completion: completion)
         } catch {
             completion(error)
@@ -287,7 +287,7 @@ class FirestoreService {
         }
         
         do {
-            try db.collection(AppConstants.Firebase.eventsCollection).document(eventId).setData(from: event, merge: true) { error in
+            try db.collection("events").document(eventId).setData(from: event, merge: true) { error in
                 if let error = error {
                     print("❌ Firestore update error: \(error.localizedDescription)")
                     completion(false, error)
@@ -305,7 +305,7 @@ class FirestoreService {
     // NEW: Create a new event - Different name to avoid conflict
     func saveNewEvent(_ event: Event, completion: @escaping (Bool, Error?) -> Void) {
         do {
-            let ref = db.collection(AppConstants.Firebase.eventsCollection).document()
+            let ref = db.collection("events").document()
             var newEvent = event
             newEvent.id = ref.documentID
             
@@ -328,7 +328,7 @@ class FirestoreService {
     
     // NEW: Fetch a single event by ID
     func fetchSingleEvent(eventId: String, completion: @escaping (Event?, Error?) -> Void) {
-        db.collection(AppConstants.Firebase.eventsCollection).document(eventId).getDocument { snapshot, error in
+        db.collection("events").document(eventId).getDocument { snapshot, error in
             if let error = error {
                 print("❌ Firestore fetch error: \(error.localizedDescription)")
                 completion(nil, error)
@@ -349,7 +349,7 @@ class FirestoreService {
     
     // NEW: Fetch events for a specific merchant
     func fetchEventsForMerchant(merchantId: String, completion: @escaping ([Event]?, Error?) -> Void) {
-        db.collection(AppConstants.Firebase.eventsCollection)
+        db.collection("events")
             .whereField("merchant_ids", arrayContains: merchantId)
             .order(by: "start_date", descending: true)
             .getDocuments { snapshot, error in
@@ -370,7 +370,7 @@ class FirestoreService {
     
     // NEW: Delete an event
     func deleteEvent(eventId: String, completion: @escaping (Bool, Error?) -> Void) {
-        db.collection(AppConstants.Firebase.eventsCollection).document(eventId).delete { error in
+        db.collection("events").document(eventId).delete { error in
             if let error = error {
                 print("❌ Failed to delete event: \(error.localizedDescription)")
                 completion(false, error)
@@ -384,7 +384,7 @@ class FirestoreService {
     func fetchNearbyEvents(latitude: Double, longitude: Double, radiusInKm: Double, completion: @escaping ([Event]?, Error?) -> Void) {
         // In a real app, you'd implement a geospatial query here
         // For simplicity, we'll just fetch all active events for now
-        db.collection(AppConstants.Firebase.eventsCollection)
+        db.collection("events")
             .whereField("active", isEqualTo: true)
             .getDocuments { snapshot, error in
                 if let error = error {
@@ -405,7 +405,7 @@ class FirestoreService {
     
     func createOrder(_ order: Order, completion: @escaping (String?, Error?) -> Void) {
         do {
-            let ref = db.collection(AppConstants.Firebase.ordersCollection).document()
+            let ref = db.collection("orders").document()
             var newOrder = order
             newOrder.id = ref.documentID
             
@@ -422,7 +422,7 @@ class FirestoreService {
     }
     
     func fetchOrders(for userId: String, completion: @escaping ([Order]?, Error?) -> Void) {
-        db.collection(AppConstants.Firebase.ordersCollection)
+        db.collection("orders")
             .whereField("user_id", isEqualTo: userId)
             .order(by: "created_at", descending: true)
             .getDocuments { snapshot, error in
@@ -441,8 +441,8 @@ class FirestoreService {
     
     // NEW: Fetch orders for a band/merchant
     func fetchOrdersForBand(bandId: String, completion: @escaping ([Order]?, Error?) -> Void) {
-        db.collection(AppConstants.Firebase.ordersCollection)
-            .whereField(AppConstants.Firebase.bandIdField, isEqualTo: bandId)
+        db.collection("orders")
+            .whereField("band_id", isEqualTo: bandId)
             .order(by: "created_at", descending: true)
             .getDocuments { snapshot, error in
                 if let error = error {
@@ -459,7 +459,7 @@ class FirestoreService {
     }
     
     func updateOrderStatus(orderId: String, status: OrderStatus, completion: @escaping (Error?) -> Void) {
-        db.collection(AppConstants.Firebase.ordersCollection).document(orderId).updateData([
+        db.collection("orders").document(orderId).updateData([
             "status": status.rawValue
         ]) { error in
             completion(error)

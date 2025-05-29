@@ -41,7 +41,7 @@ class EventViewModel: ObservableObject {
         
         let db = Firestore.firestore()
         
-        db.collection(AppConstants.Firebase.eventsCollection)
+        db.collection("events")
             .whereField("merchant_ids", arrayContains: merchantId)
             .order(by: "start_date", descending: false)
             .getDocuments { [weak self] snapshot, error in
@@ -75,7 +75,7 @@ class EventViewModel: ObservableObject {
         let db = Firestore.firestore()
         
         do {
-            let ref = db.collection(AppConstants.Firebase.eventsCollection).document()
+            let ref = db.collection("events").document()
             var newEvent = event
             newEvent.id = ref.documentID
             
@@ -116,7 +116,7 @@ class EventViewModel: ObservableObject {
         let db = Firestore.firestore()
         
         do {
-            try db.collection(AppConstants.Firebase.eventsCollection).document(eventId).setData(from: event) { [weak self] error in
+            try db.collection("events").document(eventId).setData(from: event) { [weak self] error in
                 DispatchQueue.main.async {
                     self?.isLoading = false
                     
@@ -149,8 +149,8 @@ class EventViewModel: ObservableObject {
         let db = Firestore.firestore()
         
         // First, we need to remove this event from all associated products
-        db.collection(AppConstants.Firebase.productsCollection)
-            .whereField(AppConstants.Firebase.eventIdsField, arrayContains: eventId)
+        db.collection("products")
+            .whereField("event_ids", arrayContains: eventId)
             .getDocuments { [weak self] snapshot, error in
                 if let error = error {
                     DispatchQueue.main.async {
@@ -166,12 +166,12 @@ class EventViewModel: ObservableObject {
                 // Remove event ID from all associated products
                 snapshot?.documents.forEach { document in
                     batch.updateData([
-                        AppConstants.Firebase.eventIdsField: FieldValue.arrayRemove([eventId])
+                        "event_ids": FieldValue.arrayRemove([eventId])
                     ], forDocument: document.reference)
                 }
                 
                 // Delete the event document
-                let eventRef = db.collection(AppConstants.Firebase.eventsCollection).document(eventId)
+                let eventRef = db.collection("events").document(eventId)
                 batch.deleteDocument(eventRef)
                 
                 // Commit the batch
@@ -204,7 +204,7 @@ class EventViewModel: ObservableObject {
         let currentStatus = events[eventIndex].active
         let newStatus = !currentStatus
         
-        db.collection(AppConstants.Firebase.eventsCollection).document(eventId).updateData([
+        db.collection("events").document(eventId).updateData([
             "active": newStatus
         ]) { [weak self] error in
             DispatchQueue.main.async {
@@ -224,7 +224,7 @@ class EventViewModel: ObservableObject {
     func fetchEvent(eventId: String, completion: @escaping (Event?) -> Void) {
         let db = Firestore.firestore()
         
-        db.collection(AppConstants.Firebase.eventsCollection).document(eventId).getDocument { snapshot, error in
+        db.collection("events").document(eventId).getDocument { snapshot, error in
             if let error = error {
                 print("Error fetching event: \(error)")
                 DispatchQueue.main.async {
@@ -269,4 +269,3 @@ class EventViewModel: ObservableObject {
         }
     }
 }
-

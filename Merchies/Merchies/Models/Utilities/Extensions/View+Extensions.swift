@@ -13,7 +13,7 @@ extension View {
                     Color.black.opacity(0.3)
                         .ignoresSafeArea()
                     
-                    VStack(spacing: AppConstants.UI.standardPadding) {
+                    VStack(spacing: 16) {
                         ProgressView()
                             .scaleEffect(1.5)
                             .progressViewStyle(CircularProgressViewStyle(tint: .blue))
@@ -22,9 +22,9 @@ extension View {
                             .font(.headline)
                             .foregroundColor(.primary)
                     }
-                    .padding(AppConstants.UI.largePadding)
+                    .padding(24)
                     .background(Color(.systemBackground))
-                    .cornerRadius(AppConstants.UI.cardCornerRadius)
+                    .cornerRadius(12)
                     .shadow(radius: 8)
                 }
             }
@@ -32,11 +32,11 @@ extension View {
     }
     
     /// Show error alert with standardized styling
-    func errorAlert(isPresented: Binding<Bool>, error: AppError?) -> some View {
+    func errorAlert(isPresented: Binding<Bool>, error: String?) -> some View {
         self.alert("Error", isPresented: isPresented) {
             Button("OK", role: .cancel) { }
         } message: {
-            Text(error?.userMessage ?? AppConstants.ErrorMessages.genericError)
+            Text(error ?? "An unexpected error occurred. Please try again.")
         }
     }
     
@@ -59,7 +59,7 @@ extension View {
                         }
                         .padding()
                         .background(Color(.systemBackground))
-                        .cornerRadius(AppConstants.UI.standardCornerRadius)
+                        .cornerRadius(8)
                         .shadow(radius: 4)
                         .padding(.bottom, 100)
                     }
@@ -83,9 +83,9 @@ extension View {
     /// Apply card styling with standard appearance
     func cardStyle() -> some View {
         self
-            .padding(AppConstants.UI.standardPadding)
+            .padding(16)
             .background(Color(.systemBackground))
-            .cornerRadius(AppConstants.UI.cardCornerRadius)
+            .cornerRadius(12)
             .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
     
@@ -95,8 +95,8 @@ extension View {
             .font(.headline)
             .fontWeight(.semibold)
             .foregroundColor(.primary)
-            .padding(.horizontal, AppConstants.UI.standardPadding)
-            .padding(.vertical, AppConstants.UI.smallPadding)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
     }
     
     /// Apply primary button styling
@@ -105,9 +105,9 @@ extension View {
             .font(.headline)
             .foregroundColor(.white)
             .frame(maxWidth: .infinity)
-            .padding(AppConstants.UI.standardPadding)
+            .padding(16)
             .background(Color.blue)
-            .cornerRadius(AppConstants.UI.standardCornerRadius)
+            .cornerRadius(8)
     }
     
     /// Apply secondary button styling
@@ -116,9 +116,9 @@ extension View {
             .font(.headline)
             .foregroundColor(.blue)
             .frame(maxWidth: .infinity)
-            .padding(AppConstants.UI.standardPadding)
+            .padding(16)
             .background(Color.blue.opacity(0.1))
-            .cornerRadius(AppConstants.UI.standardCornerRadius)
+            .cornerRadius(8)
     }
     
     /// Apply destructive button styling
@@ -127,9 +127,9 @@ extension View {
             .font(.headline)
             .foregroundColor(.white)
             .frame(maxWidth: .infinity)
-            .padding(AppConstants.UI.standardPadding)
+            .padding(16)
             .background(Color.red)
-            .cornerRadius(AppConstants.UI.standardCornerRadius)
+            .cornerRadius(8)
     }
 }
 
@@ -141,12 +141,8 @@ extension View {
         self.navigationBarHidden(true)
     }
     
-    /// Set navigation title with display mode
-    func navigationTitle(_ title: String, displayMode: NavigationBarItem.TitleDisplayMode = .automatic) -> some View {
-        self
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(displayMode)
-    }
+    
+
     
     /// Add close button to navigation bar
     func closeButton(action: @escaping () -> Void) -> some View {
@@ -183,15 +179,15 @@ extension View {
     
     /// Apply one of two modifiers based on condition
     @ViewBuilder
-    func `if`<TrueContent: View, FalseContent: View>(
+    func conditionalModifier<TrueContent: View, FalseContent: View>(
         _ condition: Bool,
-        if ifTransform: (Self) -> TrueContent,
-        else elseTransform: (Self) -> FalseContent
+        ifTrue: (Self) -> TrueContent,
+        ifFalse: (Self) -> FalseContent
     ) -> some View {
         if condition {
-            ifTransform(self)
+            ifTrue(self)
         } else {
-            elseTransform(self)
+            ifFalse(self)
         }
     }
 }
@@ -200,26 +196,26 @@ extension View {
 
 extension View {
     /// Apply standard product image styling
-    func productImageStyle(size: CGFloat = AppConstants.UI.standardImageSize) -> some View {
+    func productImageStyle(size: CGFloat = 150) -> some View {
         self
             .frame(width: size, height: size)
-            .cornerRadius(AppConstants.UI.standardCornerRadius)
+            .cornerRadius(8)
             .clipped()
     }
     
     /// Apply circular avatar styling
-    func avatarStyle(size: CGFloat = AppConstants.UI.thumbnailSize) -> some View {
+    func avatarStyle(size: CGFloat = 80) -> some View {
         self
             .frame(width: size, height: size)
             .clipShape(Circle())
     }
     
     /// Apply event image styling
-    func eventImageStyle(height: CGFloat = AppConstants.UI.heroImageHeight) -> some View {
+    func eventImageStyle(height: CGFloat = 200) -> some View {
         self
             .frame(height: height)
             .frame(maxWidth: .infinity)
-            .cornerRadius(AppConstants.UI.cardCornerRadius)
+            .cornerRadius(12)
             .clipped()
     }
 }
@@ -230,16 +226,16 @@ extension View {
     /// Apply standard form field styling
     func formFieldStyle() -> some View {
         self
-            .padding(AppConstants.UI.standardPadding)
+            .padding(16)
             .background(Color(.systemGray6))
-            .cornerRadius(AppConstants.UI.standardCornerRadius)
+            .cornerRadius(8)
     }
     
     /// Apply form section styling
     func formSectionStyle() -> some View {
         self
-            .padding(.horizontal, AppConstants.UI.standardPadding)
-            .padding(.vertical, AppConstants.UI.smallPadding)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
     }
 }
 
@@ -253,12 +249,12 @@ extension View {
     
     /// Apply quick fade animation
     func quickFade() -> some View {
-        self.animation(.easeInOut(duration: AppConstants.UI.shortAnimationDuration), value: UUID())
+        self.animation(.easeInOut(duration: 0.2), value: UUID())
     }
     
     /// Apply smooth scale animation
     func smoothScale() -> some View {
-        self.animation(.easeInOut(duration: AppConstants.UI.standardAnimationDuration), value: UUID())
+        self.animation(.easeInOut(duration: 0.3), value: UUID())
     }
 }
 
@@ -278,11 +274,16 @@ extension View {
 extension View {
     /// Add accessibility label and hint
     func accessibility(label: String, hint: String? = nil) -> some View {
-        self
-            .accessibilityLabel(label)
-            .if(hint != nil) { view in
-                view.accessibilityHint(hint!)
+        Group {
+            if let hint = hint {
+                self
+                    .accessibilityLabel(label)
+                    .accessibilityHint(hint)
+            } else {
+                self
+                    .accessibilityLabel(label)
             }
+        }
     }
     
     /// Mark as accessibility element with value

@@ -14,7 +14,7 @@ class ImageUploadService: ObservableObject {
         
         var folder: String {
             switch self {
-            case .product: return AppConstants.Firebase.productsCollection
+            case .product: return "products"
             case .event: return "event_images"  // Match your existing EditEventView.swift
             case .profile: return "profiles"
             }

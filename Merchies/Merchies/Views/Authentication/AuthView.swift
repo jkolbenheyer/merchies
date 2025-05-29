@@ -29,12 +29,12 @@ struct AuthView: View {
                                 .autocapitalization(.none)
                                 .padding()
                                 .background(Color(.systemGray6))
-                                .cornerRadius(AppConstants.UI.standardCornerRadius)
+                                .cornerRadius(8)
 
                             SecureField(isSignIn ? "Password" : "Create Password", text: $password)
                                 .padding()
                                 .background(Color(.systemGray6))
-                                .cornerRadius(AppConstants.UI.standardCornerRadius)
+                                .cornerRadius(8)
 
                             Button(action: {
                                 if isSignIn {
@@ -49,7 +49,7 @@ struct AuthView: View {
                                     .frame(maxWidth: .infinity)
                                     .padding()
                                     .background(Color.cyan)
-                                    .cornerRadius(AppConstants.UI.standardCornerRadius)
+                                    .cornerRadius(8)
                             }
                             .disabled(email.isEmpty || password.isEmpty || authViewModel.isLoading)
 
@@ -65,7 +65,7 @@ struct AuthView: View {
                                 .frame(maxWidth: .infinity)
                                 .padding()
                                 .background(Color.black)
-                                .cornerRadius(AppConstants.UI.standardCornerRadius)
+                                .cornerRadius(8)
                             }
 
                             Button(action: {

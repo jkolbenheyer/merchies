@@ -64,7 +64,7 @@ struct FanDashboardView: View {
                     }
                     .padding()
                     .background(Color(UIColor.secondarySystemBackground))
-                    .cornerRadius(AppConstants.UI.cardCornerRadius)
+                    .cornerRadius(16)
                     .padding(.horizontal)
 
                     // Main content
@@ -92,7 +92,7 @@ struct FanDashboardView: View {
                         ZStack {
                             Rectangle()
                                 .fill(Color.gray.opacity(0.2))
-                                .cornerRadius(AppConstants.UI.standardCornerRadius)
+                                .cornerRadius(8)
                             Image(systemName: "photo")
                                 .font(.largeTitle)
                                 .foregroundColor(.gray)
@@ -150,7 +150,7 @@ struct FanDashboardView: View {
                                     : Color.gray
                                 )
                                 .foregroundColor(.white)
-                                .cornerRadius(AppConstants.UI.standardCornerRadius)
+                                .cornerRadius(8)
                         }
                         .disabled(selectedDetailSize == nil)
                         .padding(.horizontal)

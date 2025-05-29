@@ -1,5 +1,6 @@
 import SwiftUI
 import Foundation
+import FirebaseFirestore
 
 struct ProductDetailView: View {
     let product: Product

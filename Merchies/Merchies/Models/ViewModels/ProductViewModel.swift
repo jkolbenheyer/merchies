@@ -13,7 +13,7 @@ class ProductViewModel: ObservableObject {
     func fetchProducts(for eventId: String) {
         isLoading = true
         
-        firestoreService.fetchProducts(for: eventId) { [weak self] products, error in
+        firestoreService.fetchProducts(for: eventId) { [weak self] (products: [Product]?, error: Error?) in
             DispatchQueue.main.async {
                 self?.isLoading = false
                 
@@ -27,10 +27,10 @@ class ProductViewModel: ObservableObject {
         }
     }
 
-    func addProduct(_ product: Product, completion: @escaping (Bool) -> Void) {
+    func addProduct(_ product: Product, completion: @escaping (_ success: Bool) -> Void) {
         isLoading = true
         
-        firestoreService.createProduct(product) { [weak self] id, error in
+        firestoreService.createProduct(product) { [weak self] (id: String?, error: Error?) in
             DispatchQueue.main.async {
                 self?.isLoading = false
                 
@@ -51,8 +51,8 @@ class ProductViewModel: ObservableObject {
         }
     }
 
-    func deleteProduct(_ productId: String, completion: @escaping (Bool) -> Void) {
-        firestoreService.deleteProduct(productId: productId) { [weak self] error in
+    func deleteProduct(_ productId: String, completion: @escaping (_ success: Bool) -> Void) {
+        firestoreService.deleteProduct(productId: productId) { [weak self] (error: Error?) in
             DispatchQueue.main.async {
                 if let error = error {
                     self?.error = error.localizedDescription
@@ -63,5 +63,29 @@ class ProductViewModel: ObservableObject {
                 }
             }
         }
+    }
+    
+    // MARK: - Helper Methods
+    
+    func clearError() {
+        error = nil
+    }
+    
+    func refreshProducts(for eventId: String) {
+        fetchProducts(for: eventId)
+    }
+    
+    // MARK: - Computed Properties
+    
+    var activeProducts: [Product] {
+        return products.filter { $0.active }
+    }
+    
+    var inactiveProducts: [Product] {
+        return products.filter { !$0.active }
+    }
+    
+    var totalInventory: Int {
+        return products.reduce(0) { $0 + $1.totalInventory }
     }
 }

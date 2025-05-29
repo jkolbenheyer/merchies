@@ -136,19 +136,19 @@ struct MerchantProductDetailView: View {
                     Rectangle()
                         .fill(Color.gray.opacity(0.2))
                         .frame(height: 200)
-                        .cornerRadius(AppConstants.UI.cardCornerRadius)
+                        .cornerRadius(12)
                         .overlay(ProgressView())
                 case .success(let image):
                     image
                         .resizable()
                         .scaledToFit()
                         .frame(maxHeight: 200)
-                        .cornerRadius(AppConstants.UI.cardCornerRadius)
+                        .cornerRadius(12)
                 case .failure:
                     Rectangle()
                         .fill(Color.gray.opacity(0.2))
                         .frame(height: 200)
-                        .cornerRadius(AppConstants.UI.cardCornerRadius)
+                        .cornerRadius(12)
                         .overlay(
                             VStack {
                                 Image(systemName: "photo")
@@ -212,12 +212,12 @@ struct MerchantProductDetailView: View {
                 DetailRow(label: "Product ID", value: product.id?.suffix(8).description ?? "Unknown")
                 DetailRow(label: "Available Sizes", value: product.sizes.joined(separator: ", "))
                 DetailRow(label: "Total Stock", value: "\(product.totalInventory)")
-                DetailRow(label: AppConstants.Firebase.eventsCollection, value: "\(product.eventIds.count)")
+                DetailRow(label: "Events", value: "\(product.eventIds.count)")
             }
         }
         .padding()
         .background(Color(.systemGray6))
-        .cornerRadius(AppConstants.UI.cardCornerRadius)
+        .cornerRadius(12)
     }
     
     // MARK: - Inventory Card
@@ -297,7 +297,7 @@ struct MerchantProductDetailView: View {
         }
         .padding()
         .background(Color(.systemGray6))
-        .cornerRadius(AppConstants.UI.cardCornerRadius)
+        .cornerRadius(12)
     }
     
     // MARK: - Events Card
@@ -372,7 +372,7 @@ struct MerchantProductDetailView: View {
         }
         .padding()
         .background(Color(.systemGray6))
-        .cornerRadius(AppConstants.UI.cardCornerRadius)
+        .cornerRadius(12)
     }
     
     // MARK: - Analytics Card
@@ -430,7 +430,7 @@ struct MerchantProductDetailView: View {
         }
         .padding()
         .background(Color(.systemGray6))
-        .cornerRadius(AppConstants.UI.cardCornerRadius)
+        .cornerRadius(12)
     }
     
     // MARK: - Action Buttons Section
@@ -512,7 +512,7 @@ struct MerchantProductDetailView: View {
         }
         
         // Update product in Firestore
-        db.collection(AppConstants.Firebase.productsCollection).document(productId).updateData([
+        db.collection("products").document(productId).updateData([
             "inventory": updatedInventory,
             "active": isActive
         ]) { error in
@@ -544,14 +544,14 @@ struct MerchantProductDetailView: View {
         
         // Remove product from all associated events
         for eventId in product.eventIds {
-            let eventRef = db.collection(AppConstants.Firebase.eventsCollection).document(eventId)
+            let eventRef = db.collection("events").document(eventId)
             batch.updateData([
                 "product_ids": FieldValue.arrayRemove([productId])
             ], forDocument: eventRef)
         }
         
         // Delete the product
-        let productRef = db.collection(AppConstants.Firebase.productsCollection).document(productId)
+        let productRef = db.collection("products").document(productId)
         batch.deleteDocument(productRef)
         
         batch.commit { error in
@@ -572,7 +572,7 @@ struct MerchantProductDetailView: View {
         
         let db = Firestore.firestore()
         
-        db.collection(AppConstants.Firebase.eventsCollection)
+        db.collection("events")
             .whereField(FieldPath.documentID(), in: product.eventIds)
             .getDocuments { snapshot, error in
                 if let error = error {
@@ -700,7 +700,7 @@ struct AssociatedEventsView: View {
         
         let db = Firestore.firestore()
         
-        db.collection(AppConstants.Firebase.eventsCollection)
+        db.collection("events")
             .whereField(FieldPath.documentID(), in: eventIds)
             .getDocuments { snapshot, error in
                 DispatchQueue.main.async {

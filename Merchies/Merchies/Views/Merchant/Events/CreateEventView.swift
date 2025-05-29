@@ -23,7 +23,7 @@ struct CreateEventView: View {
     @State private var eventDescription = ""
     @State private var startDate = Date()
     @State private var endDate = Date().addingTimeInterval(3600 * 4) // 4 hours later
-    @State private var geofenceRadius: Double = AppConstants.Geofencing.defaultRadius // meters
+    @State private var geofenceRadius: Double = 100.0 // meters - default radius
     @State private var maxCapacity = ""
     @State private var ticketPrice = ""
     
@@ -61,7 +61,7 @@ struct CreateEventView: View {
                                     .resizable()
                                     .scaledToFit()
                                     .frame(maxHeight: 200)
-                                    .cornerRadius(AppConstants.UI.cardCornerRadius)
+                                    .cornerRadius(12)
                             } else {
                                 Button("Select Event Image") {
                                     showingImagePicker = true
@@ -69,7 +69,7 @@ struct CreateEventView: View {
                                 .frame(maxWidth: .infinity)
                                 .padding()
                                 .background(Color.gray.opacity(0.2))
-                                .cornerRadius(AppConstants.UI.cardCornerRadius)
+                                .cornerRadius(12)
                             }
                         }
                     }
@@ -156,7 +156,7 @@ struct CreateEventView: View {
                             }
                         }
                         .frame(height: 150)
-                        .cornerRadius(AppConstants.UI.standardCornerRadius)
+                        .cornerRadius(8)
                         .disabled(true)
                     }
                 }
@@ -295,7 +295,7 @@ struct CreateEventView: View {
             endDate: endDate,
             latitude: location.latitude,
             longitude: location.longitude,
-            geofenceRadius: Double = geofenceRadius,
+            geofenceRadius: geofenceRadius, // Fixed: removed "Double =" syntax error
             active: true,
             merchantIds: [user.uid],
             imageUrl: imageURL,
@@ -336,7 +336,7 @@ struct EventPreviewCard: View {
                     .resizable()
                     .scaledToFill()
                     .frame(height: 120)
-                    .cornerRadius(AppConstants.UI.standardCornerRadius)
+                    .cornerRadius(8)
                     .clipped()
             }
             
@@ -365,7 +365,7 @@ struct EventPreviewCard: View {
         }
         .padding(eventImage != nil ? 0 : 16)
         .background(Color.purple.opacity(0.1))
-        .cornerRadius(AppConstants.UI.cardCornerRadius)
+        .cornerRadius(12)
     }
     
     private func formatDateRange(start: Date, end: Date) -> String {
@@ -387,7 +387,7 @@ struct EventPreviewCard: View {
     }
 }
 
-// MARK: - Location Picker and Supporting Views (keeping existing implementation)
+// MARK: - Location Picker and Supporting Views
 struct LocationPickerView: View {
     @Binding var selectedLocation: CLLocationCoordinate2D?
     @Binding var address: String
@@ -462,7 +462,7 @@ struct LocationPickerView: View {
                     }
                     .padding()
                     .background(Color.purple.opacity(0.1))
-                    .cornerRadius(AppConstants.UI.standardCornerRadius)
+                    .cornerRadius(8)
                     .padding(.horizontal)
                 }
             }
@@ -577,7 +577,7 @@ struct SearchBar: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 8)
             .background(Color(.systemGray6))
-            .cornerRadius(AppConstants.UI.standardCornerRadius)
+            .cornerRadius(8)
             
             if !text.isEmpty {
                 Button("Search") {

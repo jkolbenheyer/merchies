@@ -139,7 +139,7 @@ struct EventProductsView: View {
                         .frame(maxWidth: .infinity)
                         .padding()
                         .background(Color.cyan)
-                        .cornerRadius(AppConstants.UI.cardCornerRadius)
+                        .cornerRadius(12)
                 }
                 
                 Button(action: onCreateNew) {
@@ -149,7 +149,7 @@ struct EventProductsView: View {
                         .frame(maxWidth: .infinity)
                         .padding()
                         .background(Color.cyan.opacity(0.1))
-                        .cornerRadius(AppConstants.UI.cardCornerRadius)
+                        .cornerRadius(12)
                 }
             }
             .padding(.horizontal, 24)
@@ -185,20 +185,20 @@ struct OriginalEventProductCard: View {
                     Rectangle()
                         .fill(Color.gray.opacity(0.2))
                         .frame(width: 60, height: 60)
-                        .cornerRadius(AppConstants.UI.standardCornerRadius)
+                        .cornerRadius(8)
                         .overlay(ProgressView().scaleEffect(0.8))
                 case .success(let image):
                     image
                         .resizable()
                         .aspectRatio(contentMode: .fill)
                         .frame(width: 60, height: 60)
-                        .cornerRadius(AppConstants.UI.standardCornerRadius)
+                        .cornerRadius(8)
                         .clipped()
                 case .failure:
                     Rectangle()
                         .fill(Color.gray.opacity(0.2))
                         .frame(width: 60, height: 60)
-                        .cornerRadius(AppConstants.UI.standardCornerRadius)
+                        .cornerRadius(8)
                         .overlay(
                             Image(systemName: "photo")
                                 .foregroundColor(.gray)

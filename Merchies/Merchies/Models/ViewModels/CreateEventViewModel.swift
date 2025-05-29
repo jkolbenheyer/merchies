@@ -1,4 +1,4 @@
-// EventCreationViewModel.swift - Unique Name to Avoid Conflicts
+// Models/ViewModels/CreateEventViewModel.swift - Fixed Version
 
 import Foundation
 import Firebase
@@ -13,14 +13,14 @@ class EventCreationViewModel: ObservableObject {
 
     private let firestoreService = FirestoreService()
 
-    func createEvent(_ event: Event, completion: @escaping (Bool) -> Void) {
+    func createEvent(_ event: Event, completion: @escaping (_ success: Bool) -> Void) {
         isLoading = true
         error = nil
         
         print("📝 EventCreationViewModel creating event with imageUrl: \(event.imageUrl ?? "nil")")
         
         // Use the correct FirestoreService method name
-        firestoreService.saveNewEvent(event) { [weak self] success, err in
+        firestoreService.saveNewEvent(event) { [weak self] (success: Bool, err: Error?) in
             DispatchQueue.main.async {
                 self?.isLoading = false
                 if let err = err {
@@ -39,7 +39,7 @@ class EventCreationViewModel: ObservableObject {
         }
     }
 
-    func uploadImage(_ data: Data, completion: @escaping (Bool) -> Void) {
+    func uploadImage(_ data: Data, completion: @escaping (_ success: Bool) -> Void) {
         isLoading = true
         error = nil
         let imageID = UUID().uuidString
@@ -47,7 +47,7 @@ class EventCreationViewModel: ObservableObject {
         
         print("📤 EventCreationViewModel starting image upload...")
         
-        ref.putData(data, metadata: nil) { [weak self] _, err in
+        ref.putData(data, metadata: nil) { [weak self] (_, err: Error?) in
             if let err = err {
                 print("❌ Image upload error: \(err.localizedDescription)")
                 DispatchQueue.main.async {
@@ -58,7 +58,7 @@ class EventCreationViewModel: ObservableObject {
                 return
             }
             
-            ref.downloadURL { url, err2 in
+            ref.downloadURL { (url: URL?, err2: Error?) in
                 DispatchQueue.main.async {
                     self?.isLoading = false
                     if let url = url {
