@@ -1,4 +1,4 @@
-// EditEventView.swift
+// EditEventView.swift - FIXED VERSION WITH PROPER DELETE STYLING AND IMAGE REMOVAL
 
 import SwiftUI
 import MapKit
@@ -72,19 +72,10 @@ struct EditEventView: View {
                 }
                 
                 ToolbarItem(placement: .primaryAction) {
-                    HStack(spacing: 12) {
-                        // Delete button
-                        Button(action: { showingDeleteAlert = true }) {
-                            Image(systemName: "trash")
-                                .foregroundColor(.red)
-                        }
-                        .disabled(isDeleting || vm.isLoading || isUploadingImage)
-                        
-                        // Save button
-                        Button("Save", action: saveEvent)
-                            .disabled(!isFormValid || vm.isLoading || isUploadingImage || isDeleting)
-                            .fontWeight(.semibold)
-                    }
+                    // FIXED: Removed delete button from toolbar - only keep Save button
+                    Button("Save", action: saveEvent)
+                        .disabled(!isFormValid || vm.isLoading || isUploadingImage || isDeleting)
+                        .fontWeight(.semibold)
                 }
             }
             .sheet(isPresented: $showingLocationPicker) {
@@ -129,7 +120,14 @@ struct EditEventView: View {
             .onAppear {
                 setupInitialState()
                 loadEventProducts()
-                loadEventImageIfNeeded()
+                
+                // FIXED: Load image only if the event actually has an imageUrl
+                print("🔄 OnAppear - Event imageUrl: \(vm.event.imageUrl ?? "nil")")
+                if vm.event.imageUrl != nil && !vm.event.imageUrl!.isEmpty {
+                    loadEventImageIfNeeded()
+                } else {
+                    print("ℹ️ No image URL found, skipping image load")
+                }
             }
         }
     }
@@ -347,17 +345,23 @@ struct EditEventView: View {
                 }
             }
             
-            // Danger Zone Section
+            // FIXED: Danger Zone Section with full-width button and no card background
             Section {
-                Button(action: { showingDeleteAlert = true }) {
-                    HStack {
-                        Image(systemName: "trash")
+                VStack(spacing: 0) {
+                    Button(action: { showingDeleteAlert = true }) {
                         Text("Delete Event")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.red)
+                            .cornerRadius(12)
                     }
-                    .foregroundColor(.red)
-                    .frame(maxWidth: .infinity)
+                    .disabled(isDeleting || vm.isLoading || isUploadingImage)
+                    .buttonStyle(PlainButtonStyle())
                 }
-                .disabled(isDeleting || vm.isLoading || isUploadingImage)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
             } header: {
                 Text("Danger Zone")
             } footer: {
@@ -492,8 +496,12 @@ struct EditEventView: View {
         guard uiImage == nil,
               let imageUrl = vm.event.imageUrl,
               !imageUrl.isEmpty,
-              loadedEventImage == nil else { return }
+              loadedEventImage == nil else {
+            print("🚫 Skipping image load - uiImage: \(uiImage != nil), imageUrl: \(vm.event.imageUrl ?? "nil"), loadedEventImage: \(loadedEventImage != nil)")
+            return
+        }
         
+        print("🔄 Loading event image from URL: \(imageUrl)")
         isLoadingEventImage = true
         imageLoadError = nil
         
@@ -506,11 +514,14 @@ struct EditEventView: View {
                     DispatchQueue.main.async {
                         self.isLoadingEventImage = false
                         if let error = error {
+                            print("❌ Failed to load image: \(error.localizedDescription)")
                             self.imageLoadError = error.localizedDescription
                         } else if let data = data, let image = UIImage(data: data) {
+                            print("✅ Successfully loaded event image")
                             self.loadedEventImage = image
                             self.imageLoadError = nil
                         } else {
+                            print("❌ No image data received")
                             self.imageLoadError = "Failed to load image data"
                         }
                     }
@@ -519,6 +530,7 @@ struct EditEventView: View {
                 DispatchQueue.main.async {
                     self.isLoadingEventImage = false
                     self.imageLoadError = "Invalid Firebase Storage URL: \(error.localizedDescription)"
+                    print("❌ Invalid Firebase Storage URL: \(error.localizedDescription)")
                 }
             }
         } else {
@@ -527,6 +539,7 @@ struct EditEventView: View {
                 DispatchQueue.main.async {
                     self.isLoadingEventImage = false
                     self.imageLoadError = "Invalid URL format"
+                    print("❌ Invalid URL format")
                 }
                 return
             }
@@ -535,11 +548,14 @@ struct EditEventView: View {
                 DispatchQueue.main.async {
                     self.isLoadingEventImage = false
                     if let error = error {
+                        print("❌ URL session error: \(error.localizedDescription)")
                         self.imageLoadError = error.localizedDescription
                     } else if let data = data, let image = UIImage(data: data) {
+                        print("✅ Successfully loaded event image via URLSession")
                         self.loadedEventImage = image
                         self.imageLoadError = nil
                     } else {
+                        print("❌ No image data received via URLSession")
                         self.imageLoadError = "Failed to load image data"
                     }
                 }
@@ -547,12 +563,23 @@ struct EditEventView: View {
         }
     }
 
+    // FIXED: Enhanced image removal function with better state tracking
     private func removeCurrentImage() {
+        print("🗑️ Starting image removal process...")
+        print("🔍 Before removal - imageUrl: \(vm.event.imageUrl ?? "nil")")
+        
+        // Clear all image-related state variables
         vm.event.imageUrl = nil
         uiImage = nil
         uploadedImageUrl = nil
         loadedEventImage = nil
         imageLoadError = nil
+        
+        // Clear the PhotosPicker selection
+        pickedItem = nil
+        
+        print("🗑️ After removal - imageUrl: \(vm.event.imageUrl ?? "nil")")
+        print("🗑️ Image removal completed - all state cleared")
     }
 
     private func geocodeAddress() {
@@ -620,19 +647,58 @@ struct EditEventView: View {
     }
 
     private func saveEvent() {
-        if let newUrl = uploadedImageUrl { vm.event.imageUrl = newUrl }
+        print("🔄 Starting save process...")
+        
+        // Handle image state properly
+        if let newUrl = uploadedImageUrl {
+            // New image was uploaded
+            vm.event.imageUrl = newUrl
+            print("💾 Saving event with new image URL: \(newUrl)")
+        } else if uiImage == nil && loadedEventImage == nil && vm.event.imageUrl != nil {
+            // Image was explicitly removed (no new image, no loaded image, but event still has URL)
+            vm.event.imageUrl = nil
+            print("💾 Saving event with image removed (imageUrl = nil)")
+        } else {
+            // Keep existing image URL if present
+            print("💾 Saving event with existing imageUrl: \(vm.event.imageUrl ?? "nil")")
+        }
+        
         if let loc = selectedLocation {
             vm.event.latitude = loc.latitude
             vm.event.longitude = loc.longitude
         }
         vm.event.address = address
+        
+        print("📤 Final event imageUrl before save: \(vm.event.imageUrl ?? "nil")")
+        
         vm.save { success in
-            if success { showingSuccess = true }
+            if success {
+                // FIXED: Force refresh the event data after successful save to ensure UI reflects the changes
+                print("✅ Event saved successfully, refreshing event data...")
+                self.vm.refreshEvent()
+                
+                // Clear all local image state to force reload from the saved data
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    // Only clear local state if image was actually removed
+                    if self.vm.event.imageUrl == nil {
+                        self.loadedEventImage = nil
+                        self.imageLoadError = nil
+                        self.uiImage = nil
+                        self.uploadedImageUrl = nil
+                        print("🔄 Cleared local image state after save")
+                    }
+                    self.showingSuccess = true
+                }
+                
+                print("✅ Event saved successfully with imageUrl: \(self.vm.event.imageUrl ?? "nil")")
+            } else {
+                print("❌ Event save failed")
+            }
         }
     }
 }
 
-// MARK: – Supporting Views
+// MARK: – Supporting Views (unchanged from original)
 
 struct EditEventLocationAnnotation: Identifiable {
     let id = UUID()
@@ -802,7 +868,7 @@ struct EditEventPreviewCard: View {
             }
         }
         .padding()
-        .background(Color.purple.opacity(0.1))
+        .background(Color(.systemGray6))
         .cornerRadius(16)
     }
 

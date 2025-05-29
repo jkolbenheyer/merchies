@@ -37,6 +37,10 @@ class SingleEventViewModel: ObservableObject {
                     completion(false)
                 } else if success {
                     print("✅ Event saved successfully")
+                    
+                    // FIXED: Update local imageUrl to match the saved event
+                    self?.imageUrl = self?.event.imageUrl
+                    
                     completion(true)
                 } else {
                     print("❌ Event save failed - unknown error")
@@ -88,7 +92,7 @@ class SingleEventViewModel: ObservableObject {
         }
     }
     
-    // Refresh event data from Firestore
+    // FIXED: Refresh event data from Firestore with better logging
     func refreshEvent() {
         guard let eventId = event.id else { return }
         
@@ -104,9 +108,9 @@ class SingleEventViewModel: ObservableObject {
                     self?.error = err.localizedDescription
                     print("❌ Event refresh error: \(err.localizedDescription)")
                 } else if let fetchedEvent = fetchedEvent {
+                    print("✅ Event refreshed successfully - imageUrl: \(fetchedEvent.imageUrl ?? "nil")")
                     self?.event = fetchedEvent
                     self?.imageUrl = fetchedEvent.imageUrl
-                    print("✅ Event refreshed successfully")
                 } else {
                     print("❌ Event refresh failed - no event returned")
                 }

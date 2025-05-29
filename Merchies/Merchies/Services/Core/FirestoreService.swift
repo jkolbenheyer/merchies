@@ -279,26 +279,59 @@ class FirestoreService {
         }
     }
     
-    // NEW: Enhanced update event method - Different name to avoid conflict
+    // FIXED: Enhanced update event method with proper image URL handling
     func saveEvent(_ event: Event, completion: @escaping (Bool, Error?) -> Void) {
         guard let eventId = event.id else {
             completion(false, NSError(domain: "FirestoreService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Event ID is nil"]))
             return
         }
         
-        do {
-            try db.collection("events").document(eventId).setData(from: event, merge: true) { error in
-                if let error = error {
-                    print("❌ Firestore update error: \(error.localizedDescription)")
-                    completion(false, error)
-                } else {
-                    print("✅ Event updated in Firestore successfully")
-                    completion(true, nil)
-                }
+        // FIXED: Use updateData with explicit field handling for image removal
+        var updateFields: [String: Any] = [
+            "name": event.name,
+            "venue_name": event.venueName,
+            "address": event.address,
+            "start_date": Timestamp(date: event.startDate),
+            "end_date": Timestamp(date: event.endDate),
+            "latitude": event.latitude,
+            "longitude": event.longitude,
+            "geofence_radius": event.geofenceRadius,
+            "active": event.active,
+            "merchant_ids": event.merchantIds,
+            "product_ids": event.productIds
+        ]
+        
+        // FIXED: Handle image_url field - use FieldValue.delete() to remove nil values
+        if let imageUrl = event.imageUrl, !imageUrl.isEmpty {
+            updateFields["image_url"] = imageUrl
+            print("💾 FirestoreService: Setting image_url to: \(imageUrl)")
+        } else {
+            updateFields["image_url"] = FieldValue.delete()
+            print("💾 FirestoreService: Deleting image_url field")
+        }
+        
+        // Add optional fields if they exist
+        if let description = event.description {
+            updateFields["description"] = description
+        }
+        if let eventType = event.eventType {
+            updateFields["event_type"] = eventType.rawValue
+        }
+        if let maxCapacity = event.maxCapacity {
+            updateFields["max_capacity"] = maxCapacity
+        }
+        if let ticketPrice = event.ticketPrice {
+            updateFields["ticket_price"] = ticketPrice
+        }
+        
+        db.collection("events").document(eventId).updateData(updateFields) { error in
+            if let error = error {
+                print("❌ Firestore update error: \(error.localizedDescription)")
+                completion(false, error)
+            } else {
+                print("✅ Event updated in Firestore successfully")
+                completion(true, nil)
             }
-        } catch {
-            print("❌ Event encoding error: \(error.localizedDescription)")
-            completion(false, error)
         }
     }
     
