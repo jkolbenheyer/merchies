@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 
 struct OrderDetailView: View {
     let order: Order
@@ -116,7 +117,7 @@ struct OrderDetailView: View {
                 }
                 .padding()
                 .background(Color.white)
-                .cornerRadius(8)
+                .cornerRadius(AppConstants.UI.standardCornerRadius)
                 .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
                 .padding(.horizontal)
             }

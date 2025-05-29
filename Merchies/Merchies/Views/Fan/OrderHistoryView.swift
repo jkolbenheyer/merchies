@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 
 struct OrderHistoryView: View {
     var body: some View {
@@ -14,7 +15,7 @@ struct OrderHistoryView: View {
                     .foregroundColor(.gray)
                 Spacer()
             }
-            .navigationTitle("Orders")
+            .navigationTitle(AppConstants.Firebase.ordersCollection)
         }
     }
 }

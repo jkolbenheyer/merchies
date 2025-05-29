@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 
 struct ProductCardView: View {
     let product: Product
@@ -24,7 +25,7 @@ struct ProductCardView: View {
         }
         .padding()
         .background(Color(UIColor.systemBackground))
-        .cornerRadius(12)
+        .cornerRadius(AppConstants.UI.cardCornerRadius)
     }
 
     @ViewBuilder
@@ -36,7 +37,7 @@ struct ProductCardView: View {
                     image
                         .resizable()
                         .aspectRatio(1, contentMode: .fill)
-                        .cornerRadius(8)
+                        .cornerRadius(AppConstants.UI.standardCornerRadius)
                 } else {
                     ZStack {
                         Rectangle()
@@ -46,7 +47,7 @@ struct ProductCardView: View {
                             .foregroundColor(.gray)
                     }
                     .aspectRatio(1, contentMode: .fit)
-                    .cornerRadius(8)
+                    .cornerRadius(AppConstants.UI.standardCornerRadius)
                 }
             }
         } else {
@@ -58,7 +59,7 @@ struct ProductCardView: View {
                     .foregroundColor(.gray)
             }
             .aspectRatio(1, contentMode: .fit)
-            .cornerRadius(8)
+            .cornerRadius(AppConstants.UI.standardCornerRadius)
         }
     }
 

@@ -1,5 +1,7 @@
 import SwiftUI
 import CoreLocation
+import Foundation
+import FirebaseFirestore
 
 struct FanDashboardView: View {
     @StateObject private var locationService  = LocationService()
@@ -62,7 +64,7 @@ struct FanDashboardView: View {
                     }
                     .padding()
                     .background(Color(UIColor.secondarySystemBackground))
-                    .cornerRadius(12)
+                    .cornerRadius(AppConstants.UI.cardCornerRadius)
                     .padding(.horizontal)
 
                     // Main content
@@ -90,7 +92,7 @@ struct FanDashboardView: View {
                         ZStack {
                             Rectangle()
                                 .fill(Color.gray.opacity(0.2))
-                                .cornerRadius(8)
+                                .cornerRadius(AppConstants.UI.standardCornerRadius)
                             Image(systemName: "photo")
                                 .font(.largeTitle)
                                 .foregroundColor(.gray)
@@ -148,7 +150,7 @@ struct FanDashboardView: View {
                                     : Color.gray
                                 )
                                 .foregroundColor(.white)
-                                .cornerRadius(8)
+                                .cornerRadius(AppConstants.UI.standardCornerRadius)
                         }
                         .disabled(selectedDetailSize == nil)
                         .padding(.horizontal)

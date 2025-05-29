@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 
 struct OrderConfirmationView: View {
     let orderId: String
@@ -31,7 +32,7 @@ struct OrderConfirmationView: View {
                         .font(.body)
                         .padding()
                         .background(Color.gray.opacity(0.1))
-                        .cornerRadius(8)
+                        .cornerRadius(AppConstants.UI.standardCornerRadius)
                 }
                 .padding()
             }

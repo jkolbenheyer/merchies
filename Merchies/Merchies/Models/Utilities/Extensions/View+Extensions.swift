@@ -1,0 +1,327 @@
+// Utilities/Extensions/View+Extensions.swift
+import SwiftUI
+import Foundation
+
+// MARK: - Loading & Error Handling Extensions
+
+extension View {
+    /// Show loading overlay with optional message
+    func loading(_ isLoading: Bool, message: String = "Loading...") -> some View {
+        self.overlay(
+            Group {
+                if isLoading {
+                    Color.black.opacity(0.3)
+                        .ignoresSafeArea()
+                    
+                    VStack(spacing: AppConstants.UI.standardPadding) {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .progressViewStyle(CircularProgressViewStyle(tint: .blue))
+                        
+                        Text(message)
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                    }
+                    .padding(AppConstants.UI.largePadding)
+                    .background(Color(.systemBackground))
+                    .cornerRadius(AppConstants.UI.cardCornerRadius)
+                    .shadow(radius: 8)
+                }
+            }
+        )
+    }
+    
+    /// Show error alert with standardized styling
+    func errorAlert(isPresented: Binding<Bool>, error: AppError?) -> some View {
+        self.alert("Error", isPresented: isPresented) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(error?.userMessage ?? AppConstants.ErrorMessages.genericError)
+        }
+    }
+    
+    /// Show success message overlay
+    func successMessage(_ message: String, isShowing: Binding<Bool>) -> some View {
+        self.overlay(
+            Group {
+                if isShowing.wrappedValue {
+                    VStack {
+                        Spacer()
+                        
+                        HStack {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                                .font(.title2)
+                            
+                            Text(message)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                        }
+                        .padding()
+                        .background(Color(.systemBackground))
+                        .cornerRadius(AppConstants.UI.standardCornerRadius)
+                        .shadow(radius: 4)
+                        .padding(.bottom, 100)
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .onAppear {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            withAnimation {
+                                isShowing.wrappedValue = false
+                            }
+                        }
+                    }
+                }
+            }
+        )
+    }
+}
+
+// MARK: - Styling Extensions
+
+extension View {
+    /// Apply card styling with standard appearance
+    func cardStyle() -> some View {
+        self
+            .padding(AppConstants.UI.standardPadding)
+            .background(Color(.systemBackground))
+            .cornerRadius(AppConstants.UI.cardCornerRadius)
+            .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
+    }
+    
+    /// Apply section header styling
+    func sectionHeaderStyle() -> some View {
+        self
+            .font(.headline)
+            .fontWeight(.semibold)
+            .foregroundColor(.primary)
+            .padding(.horizontal, AppConstants.UI.standardPadding)
+            .padding(.vertical, AppConstants.UI.smallPadding)
+    }
+    
+    /// Apply primary button styling
+    func primaryButtonStyle() -> some View {
+        self
+            .font(.headline)
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding(AppConstants.UI.standardPadding)
+            .background(Color.blue)
+            .cornerRadius(AppConstants.UI.standardCornerRadius)
+    }
+    
+    /// Apply secondary button styling
+    func secondaryButtonStyle() -> some View {
+        self
+            .font(.headline)
+            .foregroundColor(.blue)
+            .frame(maxWidth: .infinity)
+            .padding(AppConstants.UI.standardPadding)
+            .background(Color.blue.opacity(0.1))
+            .cornerRadius(AppConstants.UI.standardCornerRadius)
+    }
+    
+    /// Apply destructive button styling
+    func destructiveButtonStyle() -> some View {
+        self
+            .font(.headline)
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding(AppConstants.UI.standardPadding)
+            .background(Color.red)
+            .cornerRadius(AppConstants.UI.standardCornerRadius)
+    }
+}
+
+// MARK: - Navigation Extensions
+
+extension View {
+    /// Hide navigation bar
+    func hideNavigationBar() -> some View {
+        self.navigationBarHidden(true)
+    }
+    
+    /// Set navigation title with display mode
+    func navigationTitle(_ title: String, displayMode: NavigationBarItem.TitleDisplayMode = .automatic) -> some View {
+        self
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(displayMode)
+    }
+    
+    /// Add close button to navigation bar
+    func closeButton(action: @escaping () -> Void) -> some View {
+        self.toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("Close", action: action)
+            }
+        }
+    }
+    
+    /// Add done button to navigation bar
+    func doneButton(action: @escaping () -> Void) -> some View {
+        self.toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button("Done", action: action)
+                    .fontWeight(.semibold)
+            }
+        }
+    }
+}
+
+// MARK: - Conditional Modifiers
+
+extension View {
+    /// Apply modifier conditionally
+    @ViewBuilder
+    func `if`<Transform: View>(_ condition: Bool, transform: (Self) -> Transform) -> some View {
+        if condition {
+            transform(self)
+        } else {
+            self
+        }
+    }
+    
+    /// Apply one of two modifiers based on condition
+    @ViewBuilder
+    func `if`<TrueContent: View, FalseContent: View>(
+        _ condition: Bool,
+        if ifTransform: (Self) -> TrueContent,
+        else elseTransform: (Self) -> FalseContent
+    ) -> some View {
+        if condition {
+            ifTransform(self)
+        } else {
+            elseTransform(self)
+        }
+    }
+}
+
+// MARK: - Image Extensions
+
+extension View {
+    /// Apply standard product image styling
+    func productImageStyle(size: CGFloat = AppConstants.UI.standardImageSize) -> some View {
+        self
+            .frame(width: size, height: size)
+            .cornerRadius(AppConstants.UI.standardCornerRadius)
+            .clipped()
+    }
+    
+    /// Apply circular avatar styling
+    func avatarStyle(size: CGFloat = AppConstants.UI.thumbnailSize) -> some View {
+        self
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+    }
+    
+    /// Apply event image styling
+    func eventImageStyle(height: CGFloat = AppConstants.UI.heroImageHeight) -> some View {
+        self
+            .frame(height: height)
+            .frame(maxWidth: .infinity)
+            .cornerRadius(AppConstants.UI.cardCornerRadius)
+            .clipped()
+    }
+}
+
+// MARK: - Form Extensions
+
+extension View {
+    /// Apply standard form field styling
+    func formFieldStyle() -> some View {
+        self
+            .padding(AppConstants.UI.standardPadding)
+            .background(Color(.systemGray6))
+            .cornerRadius(AppConstants.UI.standardCornerRadius)
+    }
+    
+    /// Apply form section styling
+    func formSectionStyle() -> some View {
+        self
+            .padding(.horizontal, AppConstants.UI.standardPadding)
+            .padding(.vertical, AppConstants.UI.smallPadding)
+    }
+}
+
+// MARK: - Animation Extensions
+
+extension View {
+    /// Apply standard spring animation
+    func standardAnimation() -> some View {
+        self.animation(.spring(response: 0.5, dampingFraction: 0.8, blendDuration: 0), value: UUID())
+    }
+    
+    /// Apply quick fade animation
+    func quickFade() -> some View {
+        self.animation(.easeInOut(duration: AppConstants.UI.shortAnimationDuration), value: UUID())
+    }
+    
+    /// Apply smooth scale animation
+    func smoothScale() -> some View {
+        self.animation(.easeInOut(duration: AppConstants.UI.standardAnimationDuration), value: UUID())
+    }
+}
+
+// MARK: - Keyboard Extensions
+
+extension View {
+    /// Dismiss keyboard on tap
+    func dismissKeyboardOnTap() -> some View {
+        self.onTapGesture {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        }
+    }
+}
+
+// MARK: - Accessibility Extensions
+
+extension View {
+    /// Add accessibility label and hint
+    func accessibility(label: String, hint: String? = nil) -> some View {
+        self
+            .accessibilityLabel(label)
+            .if(hint != nil) { view in
+                view.accessibilityHint(hint!)
+            }
+    }
+    
+    /// Mark as accessibility element with value
+    func accessibilityElement(value: String) -> some View {
+        self
+            .accessibilityElement(children: .ignore)
+            .accessibilityValue(value)
+    }
+}
+
+// MARK: - Preview Extensions
+
+extension View {
+    /// Wrap view for preview with standard padding
+    func previewLayout() -> some View {
+        self
+            .padding()
+            .previewLayout(.sizeThatFits)
+    }
+    
+    /// Preview with different color schemes
+    func previewColorSchemes() -> some View {
+        Group {
+            self.preferredColorScheme(.light)
+            self.preferredColorScheme(.dark)
+        }
+    }
+}
+
+// MARK: - Status Bar Extensions
+
+extension View {
+    /// Hide status bar
+    func hideStatusBar() -> some View {
+        self.statusBarHidden(true)
+    }
+    
+    /// Set status bar style
+    func statusBarStyle(_ style: UIStatusBarStyle) -> some View {
+        self.preferredColorScheme(style == .lightContent ? .dark : .light)
+    }
+}

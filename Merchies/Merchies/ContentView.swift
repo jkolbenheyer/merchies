@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 
 struct ContentView: View {
     @EnvironmentObject var authViewModel: AuthViewModel

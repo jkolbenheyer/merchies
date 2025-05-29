@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Firebase
+import Foundation
 
 @main
 struct MerchPitApp: App {
