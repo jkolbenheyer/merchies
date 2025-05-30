@@ -139,6 +139,13 @@ struct MerchantDashboardView: View {
                     }
                 }
             }
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    NavigationLink("Design") {
+                        EnhancedDesignSystemPreview()
+                    }
+                }
+            }
             .sheet(isPresented: $showingCreateEvent, onDismiss: loadMerchantData) { CreateEventView() }
             .sheet(isPresented: $showingEventsList, onDismiss: loadMerchantData) { EventsListView() }
             .sheet(isPresented: $showingAddProduct, onDismiss: loadMerchantProducts) { MerchProductEditView(bandId: getMerchantBandId()) }

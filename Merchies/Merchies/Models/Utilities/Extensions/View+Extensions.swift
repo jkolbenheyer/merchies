@@ -167,9 +167,9 @@ extension View {
 // MARK: - Conditional Modifiers
 
 extension View {
-    /// Apply modifier conditionally
+    /// Apply modifier conditionally (renamed to avoid keyword conflict)
     @ViewBuilder
-    func `if`<Transform: View>(_ condition: Bool, transform: (Self) -> Transform) -> some View {
+    func conditionalModifier<Transform: View>(_ condition: Bool, transform: (Self) -> Transform) -> some View {
         if condition {
             transform(self)
         } else {
@@ -178,20 +178,19 @@ extension View {
     }
     
     /// Apply one of two modifiers based on condition
-    @ViewBuilder
-    func conditionalModifier<TrueContent: View, FalseContent: View>(
-        _ condition: Bool,
-        ifTrue: (Self) -> TrueContent,
-        ifFalse: (Self) -> FalseContent
-    ) -> some View {
-        if condition {
-            ifTrue(self)
-        } else {
-            ifFalse(self)
+        @ViewBuilder
+        func conditionalModifier<TrueContent: View, FalseContent: View>(
+            _ condition: Bool,
+            ifTrue: (Self) -> TrueContent,
+            ifFalse: (Self) -> FalseContent
+        ) -> some View {
+            if condition {
+                ifTrue(self)
+            } else {
+                ifFalse(self)
+            }
         }
     }
-}
-
 // MARK: - Image Extensions
 
 extension View {
