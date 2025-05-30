@@ -2,7 +2,6 @@ import SwiftUI
 import FirebaseFirestore
 import Foundation
 
-
 struct EventProductsView: View {
     let event: Event
     @StateObject private var viewModel = EventProductsViewModel()
@@ -54,8 +53,8 @@ struct EventProductsView: View {
                 OriginalAddProductsToEventView(event: event, viewModel: viewModel)
             }
             .sheet(isPresented: $showingCreateProduct) {
-                // Present the real product‐creation flow
-                MerchProductEditView(bandId: authViewModel.user?.uid ?? "")
+                // FIXED: Use AddProductView instead of MerchProductEditView
+                AddProductView(bandId: authViewModel.user?.uid ?? "")
                     .environmentObject(authViewModel)
                     .onDisappear {
                         // When the sheet closes, re-fetch the event's products
@@ -443,58 +442,6 @@ struct OriginalSelectableProductRow: View {
                 }
             }
             .buttonStyle(PlainButtonStyle())
-        }
-    }
-}
-
-// MARK: - Create Product for Event View (Simplified)
-struct CreateProductForEventView: View {
-    let event: Event
-    let viewModel: EventProductsViewModel
-    @Environment(\.presentationMode) var presentationMode
-    @EnvironmentObject var authViewModel: AuthViewModel
-    
-    var body: some View {
-        NavigationView {
-            VStack(spacing: 20) {
-                Text("Create New Product")
-                    .font(.title)
-                    .fontWeight(.bold)
-                    .padding(.top, 50)
-                
-                Image(systemName: "plus.square.dashed")
-                    .font(.system(size: 64))
-                    .foregroundColor(.gray)
-                
-                Text("Product creation will be available in a future update. For now, please create products from the main dashboard and then add them to events.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-                
-                Spacer()
-                
-                Button("Go to Main Dashboard") {
-                    presentationMode.wrappedValue.dismiss()
-                }
-                .font(.headline)
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.cyan)
-                .cornerRadius(10)
-                .padding(.horizontal, 32)
-                .padding(.bottom, 50)
-            }
-            .navigationTitle("Create Product")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        presentationMode.wrappedValue.dismiss()
-                    }
-                }
-            }
         }
     }
 }

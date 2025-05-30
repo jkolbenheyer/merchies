@@ -40,30 +40,9 @@
 		96EFC2182DDE27AF0024B3FB /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		96EFC2292DDE321B0024B3FB /* Exceptions for "Merchies" folder in "MerchiesTests" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Models/ViewModels/AuthViewModel.swift,
-			);
-			target = 96EFC1FA2DDE25580024B3FB /* MerchiesTests */;
-		};
-		96EFC22A2DDE321B0024B3FB /* Exceptions for "Merchies" folder in "MerchiesUITests" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Models/ViewModels/AuthViewModel.swift,
-			);
-			target = 96EFC2042DDE25580024B3FB /* MerchiesUITests */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		96EFC1F02DDE25570024B3FB /* Merchies */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				96EFC2292DDE321B0024B3FB /* Exceptions for "Merchies" folder in "MerchiesTests" target */,
-				96EFC22A2DDE321B0024B3FB /* Exceptions for "Merchies" folder in "MerchiesUITests" target */,
-			);
 			path = Merchies;
 			sourceTree = "<group>";
 		};

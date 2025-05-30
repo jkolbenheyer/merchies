@@ -5,7 +5,6 @@ import FirebaseFirestore
 import FirebaseStorage
 import Foundation
 
-
 struct MerchantDashboardView: View {
     @StateObject private var productViewModel = ProductViewModel()
     @StateObject private var eventViewModel = EventViewModel()
@@ -148,7 +147,10 @@ struct MerchantDashboardView: View {
             }
             .sheet(isPresented: $showingCreateEvent, onDismiss: loadMerchantData) { CreateEventView() }
             .sheet(isPresented: $showingEventsList, onDismiss: loadMerchantData) { EventsListView() }
-            .sheet(isPresented: $showingAddProduct, onDismiss: loadMerchantProducts) { MerchProductEditView(bandId: getMerchantBandId()) }
+            .sheet(isPresented: $showingAddProduct, onDismiss: loadMerchantProducts) {
+                // FIXED: Use AddProductView instead of MerchProductEditView
+                AddProductView(bandId: getMerchantBandId())
+            }
             .sheet(item: $showingProductDetail) { product in
                 MerchantProductDetailView(product: product)
             }
