@@ -156,25 +156,71 @@ class FirestoreService {
         }
     }
     
-    // NEW: Fetch products for a specific event (using event_ids field) - Different name to avoid conflict
-    func fetchProductsForEvent(eventId: String, completion: @escaping ([Product]?, Error?) -> Void) {
-        db.collection("products")
-            .whereField("event_ids", arrayContains: eventId)
-            .whereField("active", isEqualTo: true)
-            .getDocuments { snapshot, error in
-                if let error = error {
-                    print("❌ Failed to fetch event products: \(error.localizedDescription)")
-                    completion(nil, error)
-                    return
-                }
-                
-                let products = snapshot?.documents.compactMap { document -> Product? in
-                    try? document.data(as: Product.self)
-                }
-                
-                print("✅ Fetched \(products?.count ?? 0) products for event")
-                completion(products, nil)
+    // NEW: Fetch a single product by ID
+    func fetchProductById(productId: String, completion: @escaping (Product?, Error?) -> Void) {
+        db.collection("products").document(productId).getDocument { snapshot, error in
+            if let error = error {
+                completion(nil, error)
+                return
             }
+            
+            guard let snapshot = snapshot, snapshot.exists else {
+                completion(nil, NSError(domain: "FirestoreService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Product not found"]))
+                return
+            }
+            
+            do {
+                let product = try snapshot.data(as: Product.self)
+                completion(product, nil)
+            } catch {
+                completion(nil, error)
+            }
+        }
+    }
+    
+    // NEW: Fetch products for a specific event (using event's product_ids as source of truth)
+    func fetchProductsForEvent(eventId: String, completion: @escaping ([Product]?, Error?) -> Void) {
+        // First, get the event to see its product_ids
+        db.collection("events").document(eventId).getDocument { eventSnapshot, eventError in
+            if let eventError = eventError {
+                print("❌ Failed to fetch event for product count: \(eventError.localizedDescription)")
+                completion(nil, eventError)
+                return
+            }
+            
+            guard let eventData = eventSnapshot?.data(),
+                  let productIds = eventData["product_ids"] as? [String] else {
+                print("✅ Event has no product_ids, returning empty array")
+                completion([], nil)
+                return
+            }
+            
+            // If no products are linked to this event
+            if productIds.isEmpty {
+                print("✅ Event has empty product_ids array")
+                completion([], nil)
+                return
+            }
+            
+            // Now fetch products using the event's product_ids (source of truth)
+            self.db.collection("products")
+                .whereField(FieldPath.documentID(), in: productIds)
+                .whereField("active", isEqualTo: true)
+                .getDocuments { snapshot, error in
+                    if let error = error {
+                        print("❌ Failed to fetch products by IDs: \(error.localizedDescription)")
+                        completion(nil, error)
+                        return
+                    }
+                    
+                    let products = snapshot?.documents.compactMap { document -> Product? in
+                        try? document.data(as: Product.self)
+                    }
+                    
+                    print("✅ Event '\(eventId)' has \(productIds.count) product_ids, fetched \(products?.count ?? 0) active products")
+                    completion(products, nil)
+                }
+        }
     }
     
     // NEW: Fetch available products for a merchant (excluding those already in event)

@@ -13,7 +13,7 @@ class ProductViewModel: ObservableObject {
     func fetchProducts(for eventId: String) {
         isLoading = true
         
-        firestoreService.fetchProducts(for: eventId) { [weak self] (products: [Product]?, error: Error?) in
+        firestoreService.fetchProductsForEvent(eventId: eventId) { [weak self] (products: [Product]?, error: Error?) in
             DispatchQueue.main.async {
                 self?.isLoading = false
                 

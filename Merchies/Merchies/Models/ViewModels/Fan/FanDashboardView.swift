@@ -76,6 +76,10 @@ struct FanDashboardView: View {
                 }
                 .padding(.top)
             }
+            .refreshable {
+                // Refresh events and their product counts
+                refreshNearbyEvents()
+            }
             .navigationTitle("Merchies")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -378,6 +382,7 @@ struct FanDashboardView: View {
                     }
                 } label: {
                     FanEventCard(event: event)
+                        .id(event.id) // Add ID to force refresh when event data changes
                 }
                 .buttonStyle(PlainButtonStyle())
             }
@@ -402,6 +407,26 @@ struct FanDashboardView: View {
             }
         }
     }
+    
+    // MARK: - Helper Functions
+    
+    private func refreshNearbyEvents() {
+        if simulateLocation {
+            // Refresh test events
+            eventViewModel.fetchNearbyEvents(
+                latitude: testLatitude,
+                longitude: testLongitude
+            )
+        } else {
+            // Refresh real location events
+            if let loc = locationService.currentLocation {
+                eventViewModel.fetchNearbyEvents(
+                    latitude: loc.coordinate.latitude,
+                    longitude: loc.coordinate.longitude
+                )
+            }
+        }
+    }
 }
 
 // MARK: - Fan Event Card with Real Images
@@ -411,6 +436,7 @@ struct FanEventCard: View {
     @State private var isLoadingEventImage = false
     @State private var actualProductCount: Int = 0
     @State private var isLoadingProductCount = false
+    @State private var refreshTimer: Timer?
     
     // Date formatter for this component
     private static let eventDateFormatter: DateFormatter = {
@@ -536,9 +562,32 @@ struct FanEventCard: View {
         .onAppear {
             loadEventImage()
             fetchActualProductCount()
+            // Set up a timer to refresh product count every 30 seconds for real-time updates
+            refreshTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { _ in
+                fetchActualProductCount()
+            }
+            
+            // Add observer for when app becomes active
+            NotificationCenter.default.addObserver(
+                forName: UIApplication.didBecomeActiveNotification,
+                object: nil,
+                queue: .main
+            ) { _ in
+                fetchActualProductCount()
+            }
+        }
+        .onDisappear {
+            // Clean up timer and observers when view disappears
+            refreshTimer?.invalidate()
+            refreshTimer = nil
+            NotificationCenter.default.removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
         }
         .onChange(of: event.imageUrl) { _ in
             loadEventImage()
+        }
+        .onChange(of: event.productIds.count) { _ in
+            // Refresh product count when event.productIds changes
+            fetchActualProductCount()
         }
     }
     
@@ -603,6 +652,11 @@ struct FanEventCard: View {
             return
         }
         
+        // Don't start a new fetch if one is already in progress
+        if isLoadingProductCount {
+            return
+        }
+        
         isLoadingProductCount = true
         
         // Use FirestoreService to get actual products linked to this event
@@ -613,13 +667,22 @@ struct FanEventCard: View {
                 
                 if let error = error {
                     print("🏷️ Error fetching products for event '\(self.event.name)': \(error.localizedDescription)")
-                    // Fallback to event.productIds.count
-                    self.actualProductCount = self.event.productIds.count
+                    // Fallback to event.productIds.count if available
+                    if !self.event.productIds.isEmpty {
+                        self.actualProductCount = self.event.productIds.count
+                        print("🏷️ Using fallback count: \(self.actualProductCount)")
+                    } else {
+                        self.actualProductCount = 0
+                    }
                 } else {
                     let count = products?.count ?? 0
-                    print("🏷️ Event '\(self.event.name)' actual product count: \(count)")
-                    print("🏷️ Event '\(self.event.name)' event.productIds count: \(self.event.productIds.count)")
+                    print("🏷️ Event '\(self.event.name)' real-time product count: \(count)")
                     self.actualProductCount = count
+                    
+                    // Log discrepancy for debugging if needed
+                    if count != self.event.productIds.count {
+                        print("🏷️ ⚠️ Discrepancy: Real-time count (\(count)) != event.productIds count (\(self.event.productIds.count))")
+                    }
                 }
             }
         }
