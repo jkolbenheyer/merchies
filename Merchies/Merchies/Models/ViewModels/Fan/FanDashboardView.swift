@@ -2,19 +2,22 @@ import SwiftUI
 import CoreLocation
 import Foundation
 import FirebaseFirestore
+import FirebaseStorage
 
 struct FanDashboardView: View {
     @StateObject private var locationService  = LocationService()
     @StateObject private var eventViewModel   = EventViewModel()
     @StateObject private var productViewModel = ProductViewModel()
     @StateObject private var cartViewModel    = CartViewModel()
-    @StateObject private var orderViewModel   = OrderViewModel()
+    @EnvironmentObject var orderViewModel     : OrderViewModel
     @EnvironmentObject var authViewModel      : AuthViewModel
 
     @State private var showingCart           = false
     @State private var simulateLocation      = false
     @State private var selectedProduct       : Product? = nil
-    @State private var selectedDetailSize    : String?  = nil
+    @State private var selectedDetailSizes: Set<String> = []
+    @State private var loadedDetailImage: UIImage?
+    @State private var isLoadingDetailImage = false
 
     // Formatter for event dates
     private static let eventDateFormatter: DateFormatter = {
@@ -75,6 +78,15 @@ struct FanDashboardView: View {
             }
             .navigationTitle("Merchies")
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Back") {
+                        // Reset location simulation and go back to nearby events
+                        locationService.inEventGeofence = false
+                        locationService.currentEvent = nil
+                        productViewModel.products.removeAll()
+                    }
+                }
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
                     cartButton
                 }
@@ -88,16 +100,37 @@ struct FanDashboardView: View {
             .sheet(item: $selectedProduct) { product in
                 NavigationView {
                     VStack(spacing: 20) {
-                        // Gray placeholder background + photo icon
-                        ZStack {
-                            Rectangle()
-                                .fill(Color.gray.opacity(0.2))
-                                .cornerRadius(8)
-                            Image(systemName: "photo")
-                                .font(.largeTitle)
-                                .foregroundColor(.gray)
+                        // Product image with Firebase Storage support
+                        Group {
+                            if let loadedImage = loadedDetailImage {
+                                Image(uiImage: loadedImage)
+                                    .resizable()
+                                    .aspectRatio(1, contentMode: .fill)
+                                    .frame(height: 200)
+                                    .cornerRadius(8)
+                                    .clipped()
+                            } else if isLoadingDetailImage {
+                                ZStack {
+                                    Rectangle()
+                                        .fill(Color.gray.opacity(0.2))
+                                        .cornerRadius(8)
+                                    ProgressView()
+                                        .scaleEffect(1.2)
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .purple))
+                                }
+                                .frame(height: 200)
+                            } else {
+                                ZStack {
+                                    Rectangle()
+                                        .fill(Color.purple.opacity(0.2))
+                                        .cornerRadius(8)
+                                    Image(systemName: "tshirt")
+                                        .font(.largeTitle)
+                                        .foregroundColor(.purple)
+                                }
+                                .frame(height: 200)
+                            }
                         }
-                        .frame(height: 200)
                         .padding()
 
                         // Title & price
@@ -108,24 +141,63 @@ struct FanDashboardView: View {
                             .font(.title2)
                             .foregroundColor(.purple)
 
-                        // Size picker
+                        // Size picker - only show available sizes, sorted
                         VStack(alignment: .leading) {
-                            Text("Select Size")
-                                .font(.headline)
-                            HStack(spacing: 12) {
-                                ForEach(product.sizes, id: \.self) { size in
-                                    Text(size)
-                                        .font(.subheadline)
-                                        .padding(8)
-                                        .background(
-                                            selectedDetailSize == size
-                                            ? Color.blue.opacity(0.2)
-                                            : Color.gray.opacity(0.2)
-                                        )
-                                        .cornerRadius(4)
-                                        .onTapGesture {
-                                            selectedDetailSize = size
+                            let availableSizes = product.sizes
+                                .filter { size in
+                                    let inventory = product.inventory[size] ?? 0
+                                    return inventory > 0
+                                }
+                                .sorted { lhs, rhs in
+                                    // Custom sorting for clothing sizes
+                                    let sizeOrder = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "XXXL"]
+                                    let lhsIndex = sizeOrder.firstIndex(of: lhs) ?? Int.max
+                                    let rhsIndex = sizeOrder.firstIndex(of: rhs) ?? Int.max
+                                    if lhsIndex != Int.max && rhsIndex != Int.max {
+                                        return lhsIndex < rhsIndex
+                                    }
+                                    return lhs < rhs // Fallback to alphabetical
+                                }
+                            
+                            if availableSizes.isEmpty {
+                                Text("Out of stock")
+                                    .font(.headline)
+                                    .foregroundColor(.red)
+                            } else {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Select Size\(selectedDetailSizes.isEmpty ? "" : "s")")
+                                        .font(.headline)
+                                    
+                                    if !selectedDetailSizes.isEmpty {
+                                        Text("Selected: \(selectedDetailSizes.count) size\(selectedDetailSizes.count == 1 ? "" : "s")")
+                                            .font(.caption)
+                                            .foregroundColor(.purple)
+                                            .fontWeight(.medium)
+                                    }
+                                    
+                                    HStack(spacing: 12) {
+                                        ForEach(availableSizes, id: \.self) { size in
+                                            let isSelected = selectedDetailSizes.contains(size)
+                                            
+                                            Button(action: {
+                                                if isSelected {
+                                                    selectedDetailSizes.remove(size)
+                                                } else {
+                                                    selectedDetailSizes.insert(size)
+                                                }
+                                            }) {
+                                                Text(size)
+                                                    .font(.subheadline)
+                                                    .fontWeight(.medium)
+                                                    .foregroundColor(isSelected ? .white : .primary)
+                                                    .padding(.horizontal, 12)
+                                                    .padding(.vertical, 8)
+                                                    .background(isSelected ? Color.blue : Color.gray.opacity(0.2))
+                                                    .cornerRadius(8)
+                                            }
+                                            .buttonStyle(PlainButtonStyle())
                                         }
+                                    }
                                 }
                             }
                         }
@@ -135,24 +207,45 @@ struct FanDashboardView: View {
 
                         // Add to Cart button
                         Button(action: {
-                            if let size = selectedDetailSize {
-                                cartViewModel.addToCart(product: product, size: size)
-                                selectedProduct    = nil
-                                selectedDetailSize = nil
+                            if !selectedDetailSizes.isEmpty {
+                                // Add each selected size to cart
+                                for size in selectedDetailSizes {
+                                    cartViewModel.addToCart(product: product, size: size)
+                                }
+                                selectedProduct = nil
+                                selectedDetailSizes.removeAll()
+                                loadedDetailImage = nil
                             }
                         }) {
-                            Text("Add to Cart")
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(
-                                    selectedDetailSize != nil
-                                    ? Color.blue
-                                    : Color.gray
-                                )
-                                .foregroundColor(.white)
-                                .cornerRadius(8)
+                            let availableSizes = product.sizes.filter { size in
+                                let inventory = product.inventory[size] ?? 0
+                                return inventory > 0
+                            }
+                            
+                            HStack {
+                                if availableSizes.isEmpty {
+                                    Text("Out of Stock")
+                                } else if selectedDetailSizes.isEmpty {
+                                    Text("Select Size")
+                                } else {
+                                    Text("Add to Cart")
+                                    Text("(\(selectedDetailSizes.count))")
+                                        .fontWeight(.bold)
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(
+                                availableSizes.isEmpty ? Color.gray :
+                                !selectedDetailSizes.isEmpty ? Color.blue : Color.gray
+                            )
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
                         }
-                        .disabled(selectedDetailSize == nil)
+                        .disabled(selectedDetailSizes.isEmpty || product.sizes.filter { size in
+                            let inventory = product.inventory[size] ?? 0
+                            return inventory > 0
+                        }.isEmpty)
                         .padding(.horizontal)
                     }
                     .padding()
@@ -160,10 +253,14 @@ struct FanDashboardView: View {
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
                             Button("Close") {
-                                selectedProduct    = nil
-                                selectedDetailSize = nil
+                                selectedProduct = nil
+                                selectedDetailSizes.removeAll()
+                                loadedDetailImage = nil
                             }
                         }
+                    }
+                    .onAppear {
+                        loadDetailProductImage(for: product)
                     }
                 }
             }
@@ -227,10 +324,9 @@ struct FanDashboardView: View {
         ) {
             ForEach(productViewModel.products) { product in
                 ProductCardView(product: product, cartViewModel: cartViewModel)
-                    .frame(maxWidth: .infinity, minHeight: 280)
                     .onTapGesture {
-                        selectedProduct    = product
-                        selectedDetailSize = nil
+                        selectedProduct = product
+                        selectedDetailSizes.removeAll()
                     }
             }
         }
@@ -281,20 +377,7 @@ struct FanDashboardView: View {
                         productViewModel.fetchProducts(for: id)
                     }
                 } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(event.name)
-                            .font(.headline)
-                        Text(event.venueName)
-                            .font(.subheadline)
-                            .foregroundColor(.gray)
-                        Text(Self.eventDateFormatter.string(from: event.startDate))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(UIColor.systemBackground))
-                    .cornerRadius(10)
+                    FanEventCard(event: event)
                 }
                 .buttonStyle(PlainButtonStyle())
             }
@@ -307,8 +390,8 @@ struct FanDashboardView: View {
         } label: {
             ZStack(alignment: .topTrailing) {
                 Image(systemName: "cart")
-                if cartViewModel.cartItems.count > 0 {
-                    Text("\(cartViewModel.cartItems.count)")
+                if cartViewModel.totalItemCount > 0 {
+                    Text("\(cartViewModel.totalItemCount)")
                         .font(.caption2)
                         .padding(5)
                         .background(Color.red)
@@ -317,6 +400,284 @@ struct FanDashboardView: View {
                         .offset(x: 10, y: -10)
                 }
             }
+        }
+    }
+}
+
+// MARK: - Fan Event Card with Real Images
+struct FanEventCard: View {
+    let event: Event
+    @State private var loadedEventImage: UIImage?
+    @State private var isLoadingEventImage = false
+    @State private var actualProductCount: Int = 0
+    @State private var isLoadingProductCount = false
+    
+    // Date formatter for this component
+    private static let eventDateFormatter: DateFormatter = {
+        let fmt = DateFormatter()
+        fmt.dateStyle = .medium
+        fmt.timeStyle = .short
+        return fmt
+    }()
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Event Image with Safe Firebase Storage Loading
+            Group {
+                if let loadedImage = loadedEventImage {
+                    Image(uiImage: loadedImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 80, height: 80)
+                        .cornerRadius(12)
+                        .clipped()
+                } else if isLoadingEventImage {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 80, height: 80)
+                        .cornerRadius(12)
+                        .overlay(
+                            ProgressView()
+                                .scaleEffect(0.8)
+                                .progressViewStyle(CircularProgressViewStyle(tint: .purple))
+                        )
+                } else {
+                    Rectangle()
+                        .fill(Color.purple.opacity(0.2))
+                        .frame(width: 80, height: 80)
+                        .cornerRadius(12)
+                        .overlay(
+                            Image(systemName: "calendar")
+                                .font(.title2)
+                                .foregroundColor(.purple)
+                        )
+                }
+            }
+            
+            // Event Details
+            VStack(alignment: .leading, spacing: 6) {
+                Text(event.name)
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                
+                Text(event.venueName)
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+                    .lineLimit(1)
+                
+                HStack(spacing: 4) {
+                    Image(systemName: "clock")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(Self.eventDateFormatter.string(from: event.startDate))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                HStack(spacing: 4) {
+                    Image(systemName: "location")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(event.address)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+                
+                // Status indicator
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(event.isActive ? Color.green : (event.isUpcoming ? Color.orange : Color.gray))
+                        .frame(width: 6, height: 6)
+                    Text(event.isActive ? "Live Now" : (event.isUpcoming ? "Upcoming" : "Ended"))
+                        .font(.caption2)
+                        .foregroundColor(event.isActive ? .green : (event.isUpcoming ? .orange : .gray))
+                        .fontWeight(.medium)
+                    
+                    Spacer()
+                    
+                    if actualProductCount > 0 || isLoadingProductCount {
+                        Group {
+                            if isLoadingProductCount {
+                                HStack(spacing: 4) {
+                                    ProgressView()
+                                        .scaleEffect(0.7)
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .purple))
+                                    Text("Loading...")
+                                        .font(.caption2)
+                                }
+                            } else {
+                                Text("\(actualProductCount) product\(actualProductCount == 1 ? "" : "s")")
+                                    .font(.caption2)
+                            }
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.purple.opacity(0.1))
+                        .foregroundColor(.purple)
+                        .cornerRadius(4)
+                    }
+                }
+            }
+            
+            Spacer()
+            
+            // Chevron
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundColor(.gray)
+        }
+        .padding()
+        .background(Color(UIColor.systemBackground))
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
+        .onAppear {
+            loadEventImage()
+            fetchActualProductCount()
+        }
+        .onChange(of: event.imageUrl) { _ in
+            loadEventImage()
+        }
+    }
+    
+    private func loadEventImage() {
+        guard let imageUrl = event.imageUrl, !imageUrl.isEmpty else {
+            return
+        }
+        
+        // If we already have a loaded image for this URL, don't reload
+        if loadedEventImage != nil {
+            return
+        }
+        
+        isLoadingEventImage = true
+        
+        // Safe Firebase Storage loading with URL type detection
+        if imageUrl.contains("firebasestorage.googleapis.com") {
+            // Use Firebase Storage reference for Firebase URLs
+            do {
+                let storageRef = Storage.storage().reference(forURL: imageUrl)
+                storageRef.getData(maxSize: 10 * 1024 * 1024) { data, error in
+                    DispatchQueue.main.async {
+                        self.isLoadingEventImage = false
+                        if let error = error {
+                            print("Error loading event image: \(error.localizedDescription)")
+                        } else if let data = data, let image = UIImage(data: data) {
+                            self.loadedEventImage = image
+                        }
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.isLoadingEventImage = false
+                    print("Invalid Firebase Storage URL: \(error.localizedDescription)")
+                }
+            }
+        } else {
+            // Use URLSession for regular HTTP URLs
+            guard let url = URL(string: imageUrl) else {
+                DispatchQueue.main.async {
+                    self.isLoadingEventImage = false
+                }
+                return
+            }
+            
+            URLSession.shared.dataTask(with: url) { data, response, error in
+                DispatchQueue.main.async {
+                    self.isLoadingEventImage = false
+                    if let error = error {
+                        print("Error loading event image: \(error.localizedDescription)")
+                    } else if let data = data, let image = UIImage(data: data) {
+                        self.loadedEventImage = image
+                    }
+                }
+            }.resume()
+        }
+    }
+    
+    private func fetchActualProductCount() {
+        guard let eventId = event.id else {
+            actualProductCount = 0
+            return
+        }
+        
+        isLoadingProductCount = true
+        
+        // Use FirestoreService to get actual products linked to this event
+        let firestoreService = FirestoreService()
+        firestoreService.fetchProductsForEvent(eventId: eventId) { products, error in
+            DispatchQueue.main.async {
+                self.isLoadingProductCount = false
+                
+                if let error = error {
+                    print("🏷️ Error fetching products for event '\(self.event.name)': \(error.localizedDescription)")
+                    // Fallback to event.productIds.count
+                    self.actualProductCount = self.event.productIds.count
+                } else {
+                    let count = products?.count ?? 0
+                    print("🏷️ Event '\(self.event.name)' actual product count: \(count)")
+                    print("🏷️ Event '\(self.event.name)' event.productIds count: \(self.event.productIds.count)")
+                    self.actualProductCount = count
+                }
+            }
+        }
+    }
+}
+
+// MARK: - FanDashboardView Extension for Product Details
+extension FanDashboardView {
+    // Product Detail Image Loading
+    private func loadDetailProductImage(for product: Product) {
+        guard !product.imageUrl.isEmpty else {
+            return
+        }
+        
+        // Reset previous image
+        loadedDetailImage = nil
+        isLoadingDetailImage = true
+        
+        // Safe Firebase Storage loading with URL type detection
+        if product.imageUrl.contains("firebasestorage.googleapis.com") {
+            // Use Firebase Storage reference for Firebase URLs
+            do {
+                let storageRef = Storage.storage().reference(forURL: product.imageUrl)
+                storageRef.getData(maxSize: 10 * 1024 * 1024) { data, error in
+                    DispatchQueue.main.async {
+                        self.isLoadingDetailImage = false
+                        if let error = error {
+                            print("Error loading detail product image: \(error.localizedDescription)")
+                        } else if let data = data, let image = UIImage(data: data) {
+                            self.loadedDetailImage = image
+                        }
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.isLoadingDetailImage = false
+                    print("Invalid Firebase Storage URL: \(error.localizedDescription)")
+                }
+            }
+        } else {
+            // Use URLSession for regular HTTP URLs
+            guard let url = URL(string: product.imageUrl) else {
+                DispatchQueue.main.async {
+                    self.isLoadingDetailImage = false
+                }
+                return
+            }
+            
+            URLSession.shared.dataTask(with: url) { data, response, error in
+                DispatchQueue.main.async {
+                    self.isLoadingDetailImage = false
+                    if let error = error {
+                        print("Error loading detail product image: \(error.localizedDescription)")
+                    } else if let data = data, let image = UIImage(data: data) {
+                        self.loadedDetailImage = image
+                    }
+                }
+            }.resume()
         }
     }
 }

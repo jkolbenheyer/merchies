@@ -1,5 +1,6 @@
 import SwiftUI
 import FirebaseFirestore
+import FirebaseStorage
 import Foundation
 
 struct EventProductsView: View {
@@ -174,36 +175,39 @@ struct OriginalEventProductCard: View {
     let product: Product
     let onRemove: () -> Void
     @State private var showingRemoveAlert = false
+    @State private var loadedProductImage: UIImage?
+    @State private var isLoadingProductImage = false
     
     var body: some View {
         HStack(spacing: 12) {
-            // Product Image
-            AsyncImage(url: URL(string: product.imageUrl)) { phase in
-                switch phase {
-                case .empty:
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(width: 60, height: 60)
-                        .cornerRadius(8)
-                        .overlay(ProgressView().scaleEffect(0.8))
-                case .success(let image):
-                    image
+            // Product Image with Firebase Storage Support
+            Group {
+                if let loadedImage = loadedProductImage {
+                    Image(uiImage: loadedImage)
                         .resizable()
-                        .aspectRatio(contentMode: .fill)
+                        .scaledToFill()
                         .frame(width: 60, height: 60)
                         .cornerRadius(8)
                         .clipped()
-                case .failure:
+                } else if isLoadingProductImage {
                     Rectangle()
                         .fill(Color.gray.opacity(0.2))
                         .frame(width: 60, height: 60)
                         .cornerRadius(8)
                         .overlay(
-                            Image(systemName: "photo")
-                                .foregroundColor(.gray)
+                            ProgressView()
+                                .scaleEffect(0.8)
+                                .progressViewStyle(CircularProgressViewStyle(tint: .cyan))
                         )
-                @unknown default:
-                    EmptyView()
+                } else {
+                    Rectangle()
+                        .fill(Color.cyan.opacity(0.2))
+                        .frame(width: 60, height: 60)
+                        .cornerRadius(8)
+                        .overlay(
+                            Image(systemName: "tshirt")
+                                .foregroundColor(.cyan)
+                        )
                 }
             }
             
@@ -254,6 +258,12 @@ struct OriginalEventProductCard: View {
             }
         }
         .padding(.vertical, 4)
+        .onAppear {
+            loadProductImage()
+        }
+        .onChange(of: product.imageUrl) { _ in
+            loadProductImage()
+        }
         .alert("Remove Product", isPresented: $showingRemoveAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Remove", role: .destructive) {
@@ -261,6 +271,61 @@ struct OriginalEventProductCard: View {
             }
         } message: {
             Text("Are you sure you want to remove this product from the event? Fans won't be able to purchase it anymore.")
+        }
+    }
+    
+    private func loadProductImage() {
+        guard !product.imageUrl.isEmpty else {
+            return
+        }
+        
+        // If we already have a loaded image for this URL, don't reload
+        if loadedProductImage != nil {
+            return
+        }
+        
+        isLoadingProductImage = true
+        
+        // Safe Firebase Storage loading with URL type detection
+        if product.imageUrl.contains("firebasestorage.googleapis.com") {
+            // Use Firebase Storage reference for Firebase URLs
+            do {
+                let storageRef = Storage.storage().reference(forURL: product.imageUrl)
+                storageRef.getData(maxSize: 10 * 1024 * 1024) { data, error in
+                    DispatchQueue.main.async {
+                        self.isLoadingProductImage = false
+                        if let error = error {
+                            print("Error loading product image: \(error.localizedDescription)")
+                        } else if let data = data, let image = UIImage(data: data) {
+                            self.loadedProductImage = image
+                        }
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.isLoadingProductImage = false
+                    print("Invalid Firebase Storage URL: \(error.localizedDescription)")
+                }
+            }
+        } else {
+            // Use URLSession for regular HTTP URLs
+            guard let url = URL(string: product.imageUrl) else {
+                DispatchQueue.main.async {
+                    self.isLoadingProductImage = false
+                }
+                return
+            }
+            
+            URLSession.shared.dataTask(with: url) { data, response, error in
+                DispatchQueue.main.async {
+                    self.isLoadingProductImage = false
+                    if let error = error {
+                        print("Error loading product image: \(error.localizedDescription)")
+                    } else if let data = data, let image = UIImage(data: data) {
+                        self.loadedProductImage = image
+                    }
+                }
+            }.resume()
         }
     }
 }
@@ -396,6 +461,8 @@ struct OriginalSelectableProductRow: View {
     let product: Product
     let isSelected: Bool
     let onSelectionChanged: (Bool) -> Void
+    @State private var loadedProductImage: UIImage?
+    @State private var isLoadingProductImage = false
     
     var body: some View {
         HStack {
@@ -408,21 +475,35 @@ struct OriginalSelectableProductRow: View {
                         .foregroundColor(isSelected ? .cyan : .gray)
                         .font(.title3)
                     
-                    // Product image
-                    AsyncImage(url: URL(string: product.imageUrl)) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
+                    // Product image with Firebase Storage Support
+                    Group {
+                        if let loadedImage = loadedProductImage {
+                            Image(uiImage: loadedImage)
                                 .resizable()
-                                .aspectRatio(contentMode: .fill)
+                                .scaledToFill()
                                 .frame(width: 40, height: 40)
                                 .cornerRadius(6)
                                 .clipped()
-                        default:
+                        } else if isLoadingProductImage {
                             Rectangle()
                                 .fill(Color.gray.opacity(0.2))
                                 .frame(width: 40, height: 40)
                                 .cornerRadius(6)
+                                .overlay(
+                                    ProgressView()
+                                        .scaleEffect(0.6)
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .cyan))
+                                )
+                        } else {
+                            Rectangle()
+                                .fill(Color.cyan.opacity(0.2))
+                                .frame(width: 40, height: 40)
+                                .cornerRadius(6)
+                                .overlay(
+                                    Image(systemName: "tshirt")
+                                        .foregroundColor(.cyan)
+                                        .font(.caption)
+                                )
                         }
                     }
                     
@@ -442,6 +523,67 @@ struct OriginalSelectableProductRow: View {
                 }
             }
             .buttonStyle(PlainButtonStyle())
+        }
+        .onAppear {
+            loadProductImage()
+        }
+        .onChange(of: product.imageUrl) { _ in
+            loadProductImage()
+        }
+    }
+    
+    private func loadProductImage() {
+        guard !product.imageUrl.isEmpty else {
+            return
+        }
+        
+        // If we already have a loaded image for this URL, don't reload
+        if loadedProductImage != nil {
+            return
+        }
+        
+        isLoadingProductImage = true
+        
+        // Safe Firebase Storage loading with URL type detection
+        if product.imageUrl.contains("firebasestorage.googleapis.com") {
+            // Use Firebase Storage reference for Firebase URLs
+            do {
+                let storageRef = Storage.storage().reference(forURL: product.imageUrl)
+                storageRef.getData(maxSize: 10 * 1024 * 1024) { data, error in
+                    DispatchQueue.main.async {
+                        self.isLoadingProductImage = false
+                        if let error = error {
+                            print("Error loading product image: \(error.localizedDescription)")
+                        } else if let data = data, let image = UIImage(data: data) {
+                            self.loadedProductImage = image
+                        }
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.isLoadingProductImage = false
+                    print("Invalid Firebase Storage URL: \(error.localizedDescription)")
+                }
+            }
+        } else {
+            // Use URLSession for regular HTTP URLs
+            guard let url = URL(string: product.imageUrl) else {
+                DispatchQueue.main.async {
+                    self.isLoadingProductImage = false
+                }
+                return
+            }
+            
+            URLSession.shared.dataTask(with: url) { data, response, error in
+                DispatchQueue.main.async {
+                    self.isLoadingProductImage = false
+                    if let error = error {
+                        print("Error loading product image: \(error.localizedDescription)")
+                    } else if let data = data, let image = UIImage(data: data) {
+                        self.loadedProductImage = image
+                    }
+                }
+            }.resume()
         }
     }
 }

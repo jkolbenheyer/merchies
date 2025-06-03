@@ -19,6 +19,11 @@ class CartViewModel: ObservableObject {
     
     private let firestoreService = FirestoreService()
     
+    // Computed property for total quantity of all items
+    var totalItemCount: Int {
+        cartItems.reduce(0) { $0 + $1.quantity }
+    }
+    
     func addToCart(product: Product, size: String) {
         // Check if the item already exists in the cart
         if let index = cartItems.firstIndex(where: { $0.product.id == product.id && $0.size == size }) {
@@ -44,12 +49,60 @@ class CartViewModel: ObservableObject {
     }
     
     func updateQuantity(at index: Int, quantity: Int) {
-        guard index < cartItems.count else { return }
-        let item = cartItems[index]
-        if let inventory = item.product.inventory[item.size], quantity <= inventory && quantity > 0 {
-            cartItems[index].quantity = quantity
+        guard index >= 0 && index < cartItems.count else { 
+            print("🛒 ❌ Index out of bounds! Index: \(index), Count: \(cartItems.count)")
+            return 
+        }
+        
+        if quantity <= 0 {
+            print("🛒 Removing item (quantity is 0)")
+            removeFromCart(at: index)
+            return
+        }
+        
+        print("🛒 Updating quantity from \(cartItems[index].quantity) to \(quantity)")
+        cartItems[index].quantity = quantity
+        calculateTotal()
+    }
+    
+    // Simple add one item
+    func addOne(at index: Int) {
+        print("🛒🔥 addOne called with index: \(index)")
+        print("🛒🔥 cartItems.count: \(cartItems.count)")
+        
+        guard index >= 0 && index < cartItems.count else { 
+            print("🛒🔥 ❌ Index out of bounds in addOne!")
+            return 
+        }
+        
+        print("🛒🔥 Current quantity before add: \(cartItems[index].quantity)")
+        cartItems[index].quantity += 1
+        print("🛒🔥 New quantity after add: \(cartItems[index].quantity)")
+        calculateTotal()
+        print("🛒🔥 ✅ Successfully added one!")
+    }
+    
+    // Simple subtract one item
+    func subtractOne(at index: Int) {
+        print("🛒🔥 subtractOne called with index: \(index)")
+        print("🛒🔥 cartItems.count: \(cartItems.count)")
+        
+        guard index >= 0 && index < cartItems.count else { 
+            print("🛒🔥 ❌ Index out of bounds in subtractOne!")
+            return 
+        }
+        
+        print("🛒🔥 Current quantity before subtract: \(cartItems[index].quantity)")
+        
+        if cartItems[index].quantity <= 1 {
+            print("🛒🔥 Removing item (quantity is 1)")
+            removeFromCart(at: index)
+        } else {
+            cartItems[index].quantity -= 1
+            print("🛒🔥 New quantity after subtract: \(cartItems[index].quantity)")
             calculateTotal()
         }
+        print("🛒🔥 ✅ Successfully subtracted one!")
     }
     
     func clearCart() {

@@ -111,7 +111,7 @@ struct EditEventView: View {
                 }
             }
             .alert("Event Updated!", isPresented: $showingSuccess) {
-                Button("OK") { presentationMode.wrappedValue.dismiss() }
+                Button("OK") { }
             } message: {
                 Text("Your changes have been saved successfully.")
             }
@@ -340,13 +340,8 @@ struct EditEventView: View {
                         ) {
                             VStack(spacing: DesignSystem.Spacing.lg) {
                                 ForEach(productViewModel.products) { product in
-                                    DSProductRow(
-                                        title: product.title,
-                                        price: "$\(String(format: "%.2f", product.price))",
-                                        stock: product.inventory.values.reduce(0, +),
-                                        sizes: product.sizes,
-                                        isActive: product.active,
-                                        image: nil,
+                                    EditEventProductRow(
+                                        product: product,
                                         onRemove: { removeProduct(product) }
                                     )
                                 }
@@ -1377,10 +1372,161 @@ struct EditEventAddProductsView: View {
     }
 }
 
+// MARK: - Product Row for EditEvent with Real Images
+struct EditEventProductRow: View {
+    let product: Product
+    let onRemove: () -> Void
+    @State private var loadedProductImage: UIImage?
+    @State private var isLoadingProductImage = false
+
+    var body: some View {
+        DSCard(padding: DesignSystem.Spacing.lg) {
+            HStack(spacing: DesignSystem.Spacing.lg) {
+                // Product Image with Safe Firebase Storage Loading
+                Group {
+                    if let loadedImage = loadedProductImage {
+                        Image(uiImage: loadedImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 50, height: 50)
+                            .cornerRadius(DesignSystem.CornerRadius.sm)
+                            .clipped()
+                    } else if isLoadingProductImage {
+                        Rectangle()
+                            .fill(DesignSystem.Colors.surfaceBackground)
+                            .frame(width: 50, height: 50)
+                            .cornerRadius(DesignSystem.CornerRadius.sm)
+                            .overlay(
+                                ProgressView()
+                                    .scaleEffect(0.7)
+                                    .progressViewStyle(CircularProgressViewStyle(tint: DesignSystem.Colors.primary))
+                            )
+                    } else {
+                        Rectangle()
+                            .fill(DesignSystem.Colors.success.opacity(0.2))
+                            .frame(width: 50, height: 50)
+                            .cornerRadius(DesignSystem.CornerRadius.sm)
+                            .overlay(
+                                Image(systemName: "tshirt")
+                                    .foregroundColor(DesignSystem.Colors.success)
+                            )
+                    }
+                }
+                
+                // Product details
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+                    Text(product.title)
+                        .font(DesignSystem.Typography.subheadline)
+                        .foregroundColor(DesignSystem.Colors.primaryText)
+                        .lineLimit(1)
+                    
+                    HStack {
+                        Text("$\(String(format: "%.2f", product.price))")
+                            .font(DesignSystem.Typography.footnote)
+                            .foregroundColor(DesignSystem.Colors.primary)
+                            .fontWeight(.semibold)
+                        
+                        Text("•")
+                            .foregroundColor(DesignSystem.Colors.secondaryText)
+                        
+                        Text("\(product.inventory.values.reduce(0, +)) in stock")
+                            .font(DesignSystem.Typography.footnote)
+                            .foregroundColor(product.inventory.values.reduce(0, +) > 0 ? DesignSystem.Colors.success : DesignSystem.Colors.danger)
+                    }
+                    
+                    Text(product.sizes.joined(separator: ", "))
+                        .font(DesignSystem.Typography.caption2)
+                        .foregroundColor(DesignSystem.Colors.secondaryText)
+                        .lineLimit(1)
+                }
+                
+                Spacer()
+                
+                // Status and actions
+                HStack(spacing: DesignSystem.Spacing.md) {
+                    DSStatusBadge(
+                        text: product.active ? "Active" : "Off",
+                        status: product.active ? .active : .inactive
+                    )
+                    
+                    Button(action: onRemove) {
+                        Image(systemName: "minus.circle.fill")
+                            .foregroundColor(DesignSystem.Colors.danger)
+                            .font(.system(size: 18))
+                    }
+                }
+            }
+        }
+        .onAppear {
+            loadProductImage()
+        }
+        .onChange(of: product.imageUrl) { _ in
+            loadProductImage()
+        }
+    }
+    
+    private func loadProductImage() {
+        guard !product.imageUrl.isEmpty else {
+            return
+        }
+        
+        // If we already have a loaded image for this URL, don't reload
+        if loadedProductImage != nil {
+            return
+        }
+        
+        isLoadingProductImage = true
+        
+        // Safe Firebase Storage loading with URL type detection
+        if product.imageUrl.contains("firebasestorage.googleapis.com") {
+            // Use Firebase Storage reference for Firebase URLs
+            do {
+                let storageRef = Storage.storage().reference(forURL: product.imageUrl)
+                storageRef.getData(maxSize: 10 * 1024 * 1024) { data, error in
+                    DispatchQueue.main.async {
+                        self.isLoadingProductImage = false
+                        if let error = error {
+                            print("Error loading product image: \(error.localizedDescription)")
+                        } else if let data = data, let image = UIImage(data: data) {
+                            self.loadedProductImage = image
+                        }
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.isLoadingProductImage = false
+                    print("Invalid Firebase Storage URL: \(error.localizedDescription)")
+                }
+            }
+        } else {
+            // Use URLSession for regular HTTP URLs
+            guard let url = URL(string: product.imageUrl) else {
+                DispatchQueue.main.async {
+                    self.isLoadingProductImage = false
+                }
+                return
+            }
+            
+            URLSession.shared.dataTask(with: url) { data, response, error in
+                DispatchQueue.main.async {
+                    self.isLoadingProductImage = false
+                    if let error = error {
+                        print("Error loading product image: \(error.localizedDescription)")
+                    } else if let data = data, let image = UIImage(data: data) {
+                        self.loadedProductImage = image
+                    }
+                }
+            }.resume()
+        }
+    }
+}
+
 struct EditEventSelectableProductRow: View {
     let product: Product
     let isSelected: Bool
     let onSelectionChanged: (Bool) -> Void
+    @State private var loadedProductImage: UIImage?
+    @State private var isLoadingProductImage = false
 
     var body: some View {
         Button {
@@ -1391,15 +1537,36 @@ struct EditEventSelectableProductRow: View {
                     .foregroundColor(isSelected ? DesignSystem.Colors.primary : DesignSystem.Colors.secondaryText)
                     .font(.title3)
 
-                // Product image placeholder
-                Rectangle()
-                    .fill(DesignSystem.Colors.success.opacity(0.2))
-                    .frame(width: 40, height: 40)
-                    .cornerRadius(DesignSystem.CornerRadius.sm)
-                    .overlay(
-                        Image(systemName: "tshirt")
-                            .foregroundColor(DesignSystem.Colors.success)
-                    )
+                // Product Image with Real Image Loading
+                Group {
+                    if let loadedImage = loadedProductImage {
+                        Image(uiImage: loadedImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 40, height: 40)
+                            .cornerRadius(DesignSystem.CornerRadius.sm)
+                            .clipped()
+                    } else if isLoadingProductImage {
+                        Rectangle()
+                            .fill(DesignSystem.Colors.surfaceBackground)
+                            .frame(width: 40, height: 40)
+                            .cornerRadius(DesignSystem.CornerRadius.sm)
+                            .overlay(
+                                ProgressView()
+                                    .scaleEffect(0.6)
+                                    .progressViewStyle(CircularProgressViewStyle(tint: DesignSystem.Colors.primary))
+                            )
+                    } else {
+                        Rectangle()
+                            .fill(DesignSystem.Colors.success.opacity(0.2))
+                            .frame(width: 40, height: 40)
+                            .cornerRadius(DesignSystem.CornerRadius.sm)
+                            .overlay(
+                                Image(systemName: "tshirt")
+                                    .foregroundColor(DesignSystem.Colors.success)
+                            )
+                    }
+                }
 
                 VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
                     Text(product.title)
@@ -1417,5 +1584,66 @@ struct EditEventSelectableProductRow: View {
             .padding(.vertical, DesignSystem.Spacing.sm)
         }
         .buttonStyle(PlainButtonStyle())
+        .onAppear {
+            loadProductImage()
+        }
+        .onChange(of: product.imageUrl) { _ in
+            loadProductImage()
+        }
+    }
+    
+    private func loadProductImage() {
+        guard !product.imageUrl.isEmpty else {
+            return
+        }
+        
+        // If we already have a loaded image for this URL, don't reload
+        if loadedProductImage != nil {
+            return
+        }
+        
+        isLoadingProductImage = true
+        
+        // Safe Firebase Storage loading with URL type detection
+        if product.imageUrl.contains("firebasestorage.googleapis.com") {
+            // Use Firebase Storage reference for Firebase URLs
+            do {
+                let storageRef = Storage.storage().reference(forURL: product.imageUrl)
+                storageRef.getData(maxSize: 10 * 1024 * 1024) { data, error in
+                    DispatchQueue.main.async {
+                        self.isLoadingProductImage = false
+                        if let error = error {
+                            print("Error loading product image: \(error.localizedDescription)")
+                        } else if let data = data, let image = UIImage(data: data) {
+                            self.loadedProductImage = image
+                        }
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.isLoadingProductImage = false
+                    print("Invalid Firebase Storage URL: \(error.localizedDescription)")
+                }
+            }
+        } else {
+            // Use URLSession for regular HTTP URLs
+            guard let url = URL(string: product.imageUrl) else {
+                DispatchQueue.main.async {
+                    self.isLoadingProductImage = false
+                }
+                return
+            }
+            
+            URLSession.shared.dataTask(with: url) { data, response, error in
+                DispatchQueue.main.async {
+                    self.isLoadingProductImage = false
+                    if let error = error {
+                        print("Error loading product image: \(error.localizedDescription)")
+                    } else if let data = data, let image = UIImage(data: data) {
+                        self.loadedProductImage = image
+                    }
+                }
+            }.resume()
+        }
     }
 }

@@ -13,19 +13,50 @@ class OrderViewModel: ObservableObject {
     // MARK: - Fetch Orders
     
     func fetchOrders(for userId: String) {
-        isLoading = true
-        error = nil
+        print("🔄 OrderViewModel.fetchOrders: Starting fetch for userId: \(userId)")
+        
+        // Clear any previous errors immediately
+        DispatchQueue.main.async { [weak self] in
+            self?.error = nil
+        }
+        
+        // Delay showing loading state to prevent flickering for fast responses
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            if self?.orders.isEmpty == true {
+                self?.isLoading = true
+            }
+        }
+        
+        // Add safety timeout in case Firestore hangs
+        let timeoutTimer = Timer.scheduledTimer(withTimeInterval: 15.0, repeats: false) { [weak self] _ in
+            DispatchQueue.main.async {
+                if self?.isLoading == true {
+                    print("⏰ OrderViewModel.fetchOrders: Timeout after 15 seconds")
+                    self?.isLoading = false
+                    self?.error = "Request timed out. Please check your internet connection and try again."
+                }
+            }
+        }
         
         firestoreService.fetchOrders(for: userId) { [weak self] orders, error in
             DispatchQueue.main.async {
+                timeoutTimer.invalidate() // Cancel timeout since we got a response
                 self?.isLoading = false
                 
                 if let error = error {
+                    print("❌ OrderViewModel.fetchOrders: Error fetching orders: \(error.localizedDescription)")
                     self?.error = error.localizedDescription
                     return
                 }
                 
-                self?.orders = orders ?? []
+                let fetchedOrders = orders ?? []
+                print("✅ OrderViewModel.fetchOrders: Fetched \(fetchedOrders.count) orders")
+                for (index, order) in fetchedOrders.enumerated() {
+                    print("   Order \(index + 1): ID=\(order.id ?? "nil"), Amount=$\(order.amount), Status=\(order.status.rawValue)")
+                }
+                
+                self?.orders = fetchedOrders
+                print("📦 OrderViewModel.fetchOrders: Local orders array now has \(self?.orders.count ?? 0) orders")
             }
         }
     }
@@ -51,6 +82,10 @@ class OrderViewModel: ObservableObject {
     // MARK: - Create Order
     
     func createOrder(from cartItems: [CartItem], userId: String, bandId: String, total: Double, completion: @escaping (String?) -> Void) {
+        print("🔄 OrderViewModel: Creating order for userId: \(userId)")
+        print("🔄 OrderViewModel: Cart items count: \(cartItems.count)")
+        print("🔄 OrderViewModel: Total amount: $\(total)")
+        
         isLoading = true
         error = nil
         
@@ -65,8 +100,8 @@ class OrderViewModel: ObservableObject {
             )
         }
         
-        // Generate QR code for pickup
-        let qrCode = "QR_\(UUID().uuidString)"
+        // Generate QR code for pickup (will use order ID once created)
+        let qrCode = "TEMP_QR_\(UUID().uuidString)"
         
         // Create the order
         let newOrder = Order(
@@ -85,16 +120,31 @@ class OrderViewModel: ObservableObject {
                 self?.isLoading = false
                 
                 if let error = error {
+                    print("❌ OrderViewModel: Failed to create order: \(error.localizedDescription)")
                     self?.error = error.localizedDescription
                     completion(nil)
                     return
                 }
                 
-                // Add the new order to the local array if we have orders loaded
                 if let orderId = orderId {
+                    print("✅ OrderViewModel: Order created with ID: \(orderId)")
+                    
                     var newOrderWithId = newOrder
                     newOrderWithId.id = orderId
+                    newOrderWithId.qrCode = "QR_\(orderId)" // Use orderId for QR code
+                    
+                    print("🔄 OrderViewModel: Adding order to local cache")
                     self?.orders.insert(newOrderWithId, at: 0) // Add to beginning
+                    print("✅ OrderViewModel: Local orders count now: \(self?.orders.count ?? 0)")
+                    
+                    // Update the order in Firestore with the proper QR code
+                    self?.firestoreService.updateOrderQRCode(orderId: orderId, qrCode: newOrderWithId.qrCode) { updateError in
+                        if let updateError = updateError {
+                            print("⚠️ Failed to update QR code: \(updateError.localizedDescription)")
+                        } else {
+                            print("✅ QR code updated successfully")
+                        }
+                    }
                 }
                 
                 completion(orderId)

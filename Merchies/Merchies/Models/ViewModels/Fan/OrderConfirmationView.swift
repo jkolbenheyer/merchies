@@ -42,7 +42,8 @@ struct OrderConfirmationView: View {
                 Text("Show this QR code at the pickup booth")
                     .font(.headline)
                 
-                if let qrImage = QRService.generateQRCode(from: orderId) {
+                // Generate QR code using the same format as OrderViewModel
+                if let qrImage = QRService.generateQRCode(from: "QR_\(orderId)") {
                     Image(uiImage: qrImage)
                         .interpolation(.none)
                         .resizable()

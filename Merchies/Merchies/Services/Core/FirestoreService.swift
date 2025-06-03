@@ -455,19 +455,37 @@ class FirestoreService {
     }
     
     func fetchOrders(for userId: String, completion: @escaping ([Order]?, Error?) -> Void) {
+        print("🔄 FirestoreService.fetchOrders: Querying orders for userId: \(userId)")
+        
         db.collection("orders")
             .whereField("user_id", isEqualTo: userId)
-            .order(by: "created_at", descending: true)
             .getDocuments { snapshot, error in
                 if let error = error {
+                    print("❌ FirestoreService.fetchOrders: Query error: \(error.localizedDescription)")
                     completion(nil, error)
                     return
                 }
                 
-                let orders = snapshot?.documents.compactMap { document -> Order? in
-                    try? document.data(as: Order.self)
-                }
+                print("✅ FirestoreService.fetchOrders: Query successful, found \(snapshot?.documents.count ?? 0) documents")
                 
+                var orders = snapshot?.documents.compactMap { document -> Order? in
+                    print("📄 Document ID: \(document.documentID)")
+                    print("📄 Document data: \(document.data())")
+                    
+                    do {
+                        let order = try document.data(as: Order.self)
+                        print("✅ Successfully decoded order: ID=\(order.id ?? "nil"), Amount=$\(order.amount)")
+                        return order
+                    } catch {
+                        print("❌ Failed to decode order from document \(document.documentID): \(error.localizedDescription)")
+                        return nil
+                    }
+                } ?? []
+                
+                // Sort orders by creation date (most recent first) in the app instead of Firestore
+                orders.sort { $0.createdAt > $1.createdAt }
+                
+                print("✅ FirestoreService.fetchOrders: Returning \(orders.count) successfully decoded and sorted orders")
                 completion(orders, nil)
             }
     }
@@ -494,6 +512,14 @@ class FirestoreService {
     func updateOrderStatus(orderId: String, status: OrderStatus, completion: @escaping (Error?) -> Void) {
         db.collection("orders").document(orderId).updateData([
             "status": status.rawValue
+        ]) { error in
+            completion(error)
+        }
+    }
+    
+    func updateOrderQRCode(orderId: String, qrCode: String, completion: @escaping (Error?) -> Void) {
+        db.collection("orders").document(orderId).updateData([
+            "qr_code": qrCode
         ]) { error in
             completion(error)
         }

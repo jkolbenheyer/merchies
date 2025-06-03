@@ -3,6 +3,7 @@ import Foundation
 
 struct MainTabView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
+    @StateObject private var orderViewModel = OrderViewModel()
     
     var body: some View {
         TabView {
@@ -13,12 +14,14 @@ struct MainTabView: View {
                         Label("Discover", systemImage: "music.note")
                     }
                     .environmentObject(authViewModel)
+                    .environmentObject(orderViewModel)
                 
                 OrderHistoryView()
                     .tabItem {
                         Label("Orders", systemImage: "bag")
                     }
                     .environmentObject(authViewModel)
+                    .environmentObject(orderViewModel)
                 
                 ProfileView()
                     .tabItem {
