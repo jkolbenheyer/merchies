@@ -1,5 +1,6 @@
 import SwiftUI
 import Foundation
+import FirebaseStorage
 
 struct OrderHistoryView: View {
     @EnvironmentObject var orderViewModel: OrderViewModel
@@ -176,6 +177,9 @@ struct OrderRowView: View {
     let order: Order
     let onTapOrder: () -> Void
     let onTapQRCode: () -> Void
+    @State private var eventImage: UIImage?
+    @State private var isLoadingEventImage = false
+    @State private var eventImageUrl: String?
     
     // Date formatter for order rows
     private static let dateFormatter: DateFormatter = {
@@ -187,7 +191,39 @@ struct OrderRowView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
+            HStack(spacing: 12) {
+                // Event Image
+                Group {
+                    if let eventImage = eventImage {
+                        Image(uiImage: eventImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 50, height: 50)
+                            .cornerRadius(8)
+                            .clipped()
+                    } else if isLoadingEventImage {
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.2))
+                            .frame(width: 50, height: 50)
+                            .cornerRadius(8)
+                            .overlay(
+                                ProgressView()
+                                    .scaleEffect(0.6)
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .purple))
+                            )
+                    } else {
+                        Rectangle()
+                            .fill(Color.purple.opacity(0.2))
+                            .frame(width: 50, height: 50)
+                            .cornerRadius(8)
+                            .overlay(
+                                Image(systemName: "music.note")
+                                    .foregroundColor(.purple)
+                                    .font(.title3)
+                            )
+                    }
+                }
+                
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Order #\(order.id.map { String($0.suffix(6)) } ?? "")")
                         .font(.headline)
@@ -235,6 +271,9 @@ struct OrderRowView: View {
         .onTapGesture {
             onTapOrder()
         }
+        .onAppear {
+            loadEventImage()
+        }
     }
     
     @ViewBuilder
@@ -255,5 +294,180 @@ struct OrderRowView: View {
             .background(bg)
             .foregroundColor(fg)
             .cornerRadius(12)
+    }
+    
+    // MARK: - Event Image Loading
+    
+    private func loadEventImage() {
+        print("🖼️ OrderRowView: Attempting to load event image for order \(order.id ?? "nil")")
+        print("🖼️ Order eventId: \(order.eventId ?? "nil")")
+        
+        if eventImage != nil {
+            print("🖼️ Event image already loaded for order \(order.id ?? "nil")")
+            return // Already loaded
+        }
+        
+        if let eventId = order.eventId, !eventId.isEmpty {
+            // Direct eventId approach for new orders
+            print("🖼️ Starting to fetch event data for eventId: \(eventId)")
+            fetchEventById(eventId)
+        } else {
+            // Fallback approach for legacy orders without eventId
+            print("🖼️ No eventId - using fallback to find event by bandId and date")
+            print("🖼️ Order bandId: \(order.bandId)")
+            print("🖼️ Order created: \(order.createdAt)")
+            fetchEventByBandAndDate()
+        }
+    }
+    
+    private func fetchEventById(_ eventId: String) {
+        isLoadingEventImage = true
+        
+        let firestoreService = FirestoreService()
+        firestoreService.fetchSingleEvent(eventId: eventId) { event, error in
+            DispatchQueue.main.async {
+                isLoadingEventImage = false
+                
+                if let error = error {
+                    print("❌ Error fetching event for order: \(error.localizedDescription)")
+                    return
+                }
+                
+                guard let event = event else {
+                    print("❌ No event found for eventId: \(eventId)")
+                    return
+                }
+                
+                print("✅ Successfully fetched event: \(event.name)")
+                print("🖼️ Event image URL: \(event.imageUrl ?? "nil")")
+                
+                eventImageUrl = event.imageUrl
+                loadImageFromUrl(event.imageUrl)
+            }
+        }
+    }
+    
+    private func fetchEventByBandAndDate() {
+        print("🔍 Fetching events for bandId: \(order.bandId)")
+        isLoadingEventImage = true
+        
+        let firestoreService = FirestoreService()
+        firestoreService.fetchEventsForMerchant(merchantId: order.bandId) { events, error in
+            DispatchQueue.main.async {
+                isLoadingEventImage = false
+                
+                if let error = error {
+                    print("❌ Error fetching events for bandId \(order.bandId): \(error.localizedDescription)")
+                    return
+                }
+                
+                guard let events = events, !events.isEmpty else {
+                    print("🖼️ No events found for bandId: \(order.bandId)")
+                    return
+                }
+                
+                print("📅 Found \(events.count) events for bandId \(order.bandId)")
+                for (index, event) in events.enumerated() {
+                    print("   Event \(index + 1): \(event.name) (\(event.startDate) - \(event.endDate)) - Image: \(event.imageUrl != nil ? "✅" : "❌")")
+                }
+                
+                let orderDate = order.createdAt
+                print("📅 Order created: \(orderDate)")
+                
+                // Try to find the best matching event, but be more permissive
+                var bestMatchEvent: Event?
+                
+                // First try: exact date range match
+                bestMatchEvent = events.first { event in
+                    let eventStart = event.startDate
+                    let eventEnd = event.endDate
+                    let dayBeforeEvent = Calendar.current.date(byAdding: .day, value: -1, to: eventStart) ?? eventStart
+                    let dayAfterEvent = Calendar.current.date(byAdding: .day, value: 1, to: eventEnd) ?? eventEnd
+                    
+                    let matches = orderDate >= dayBeforeEvent && orderDate <= dayAfterEvent
+                    if matches {
+                        print("📅 ✅ Date match found: \(event.name)")
+                    }
+                    return matches
+                }
+                
+                // Second try: just use the most recent event with an image
+                if bestMatchEvent == nil {
+                    print("📅 No date match found, using most recent event with image")
+                    bestMatchEvent = events
+                        .filter { $0.imageUrl != nil && !$0.imageUrl!.isEmpty }
+                        .sorted { $0.startDate > $1.startDate }
+                        .first
+                }
+                
+                // Third try: just use any event with an image
+                if bestMatchEvent == nil {
+                    print("📅 Using any event with an image")
+                    bestMatchEvent = events.first { $0.imageUrl != nil && !$0.imageUrl!.isEmpty }
+                }
+                
+                // Final fallback: use first event regardless of image
+                if bestMatchEvent == nil {
+                    print("📅 Using first available event")
+                    bestMatchEvent = events.first
+                }
+                
+                if let event = bestMatchEvent {
+                    print("✅ Selected event for legacy order: \(event.name)")
+                    print("🖼️ Event image URL: \(event.imageUrl ?? "nil")")
+                    eventImageUrl = event.imageUrl
+                    loadImageFromUrl(event.imageUrl)
+                } else {
+                    print("❌ No suitable event found for legacy order")
+                }
+            }
+        }
+    }
+    
+    private func loadImageFromUrl(_ imageUrl: String?) {
+        print("🖼️ loadImageFromUrl called with: \(imageUrl ?? "nil")")
+        guard let imageUrl = imageUrl, !imageUrl.isEmpty else {
+            print("🖼️ No image URL for event - will show fallback icon")
+            return
+        }
+        
+        print("🖼️ Starting to load image from: \(imageUrl)")
+        
+        // Safe Firebase Storage loading with URL type detection
+        if imageUrl.contains("firebasestorage.googleapis.com") {
+            // Use Firebase Storage reference for Firebase URLs
+            do {
+                let storageRef = Storage.storage().reference(forURL: imageUrl)
+                storageRef.getData(maxSize: 10 * 1024 * 1024) { data, error in
+                    DispatchQueue.main.async {
+                        if let error = error {
+                            print("❌ Error loading event image from Firebase: \(error.localizedDescription)")
+                        } else if let data = data, let image = UIImage(data: data) {
+                            print("✅ Successfully loaded event image from Firebase")
+                            eventImage = image
+                        }
+                    }
+                }
+            } catch {
+                print("❌ Invalid Firebase Storage URL: \(error.localizedDescription)")
+            }
+        } else {
+            // Use URLSession for regular HTTP URLs
+            guard let url = URL(string: imageUrl) else {
+                print("❌ Invalid URL: \(imageUrl)")
+                return
+            }
+            
+            URLSession.shared.dataTask(with: url) { data, response, error in
+                DispatchQueue.main.async {
+                    if let error = error {
+                        print("❌ Error loading event image from URL: \(error.localizedDescription)")
+                    } else if let data = data, let image = UIImage(data: data) {
+                        print("✅ Successfully loaded event image from URL")
+                        eventImage = image
+                    }
+                }
+            }.resume()
+        }
     }
 }

@@ -98,7 +98,8 @@ struct FanDashboardView: View {
             // Cart sheet
             .sheet(isPresented: $showingCart) {
                 CartView(cartViewModel: cartViewModel,
-                         orderViewModel: orderViewModel)
+                         orderViewModel: orderViewModel,
+                         currentEventId: locationService.currentEvent?.id)
             }
             // Product detail sheet
             .sheet(item: $selectedProduct) { product in

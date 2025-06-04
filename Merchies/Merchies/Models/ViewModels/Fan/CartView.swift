@@ -6,6 +6,7 @@ struct CartView: View {
     @ObservedObject var cartViewModel: CartViewModel
     @ObservedObject var orderViewModel: OrderViewModel
     @EnvironmentObject var authViewModel: AuthViewModel
+    let currentEventId: String? // Add current event ID
     @State private var showingPaymentSheet = false
     @State private var showingOrderConfirmation = false
     @State private var newOrderId: String?
@@ -126,6 +127,7 @@ struct CartView: View {
                                 from: cartViewModel.cartItems,
                                 userId: user.uid,
                                 bandId: bandId,
+                                eventId: currentEventId,
                                 total: cartViewModel.total
                             ) { orderId in
                                 if let orderId = orderId {

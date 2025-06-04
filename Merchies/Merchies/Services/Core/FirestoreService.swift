@@ -430,7 +430,6 @@ class FirestoreService {
     func fetchEventsForMerchant(merchantId: String, completion: @escaping ([Event]?, Error?) -> Void) {
         db.collection("events")
             .whereField("merchant_ids", arrayContains: merchantId)
-            .order(by: "start_date", descending: true)
             .getDocuments { snapshot, error in
                 if let error = error {
                     print("❌ Failed to fetch merchant events: \(error.localizedDescription)")
@@ -438,11 +437,14 @@ class FirestoreService {
                     return
                 }
                 
-                let events = snapshot?.documents.compactMap { document -> Event? in
+                var events = snapshot?.documents.compactMap { document -> Event? in
                     try? document.data(as: Event.self)
-                }
+                } ?? []
                 
-                print("✅ Fetched \(events?.count ?? 0) events for merchant")
+                // Sort events by start date (most recent first) in the app instead of Firestore
+                events.sort { $0.startDate > $1.startDate }
+                
+                print("✅ Fetched and sorted \(events.count) events for merchant")
                 completion(events, nil)
             }
     }

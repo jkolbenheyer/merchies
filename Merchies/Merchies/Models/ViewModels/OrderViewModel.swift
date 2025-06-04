@@ -81,10 +81,11 @@ class OrderViewModel: ObservableObject {
     
     // MARK: - Create Order
     
-    func createOrder(from cartItems: [CartItem], userId: String, bandId: String, total: Double, completion: @escaping (String?) -> Void) {
+    func createOrder(from cartItems: [CartItem], userId: String, bandId: String, eventId: String?, total: Double, completion: @escaping (String?) -> Void) {
         print("🔄 OrderViewModel: Creating order for userId: \(userId)")
         print("🔄 OrderViewModel: Cart items count: \(cartItems.count)")
         print("🔄 OrderViewModel: Total amount: $\(total)")
+        print("🔄 OrderViewModel: Event ID: \(eventId ?? "nil")")
         
         isLoading = true
         error = nil
@@ -107,7 +108,7 @@ class OrderViewModel: ObservableObject {
         let newOrder = Order(
             userId: userId,
             bandId: bandId,
-            eventId: nil, // Can be set if order is for specific event
+            eventId: eventId, // Set the actual event ID
             items: orderItems,
             amount: total,
             status: .pendingPickup,
