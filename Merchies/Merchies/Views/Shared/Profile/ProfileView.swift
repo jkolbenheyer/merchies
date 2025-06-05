@@ -120,16 +120,6 @@ struct ProfileView: View {
                 )
             }
             
-            // Favorite Products
-            NavigationLink(destination: FavoriteProductsView()) {
-                ProfileSectionRow(
-                    title: "Favorite Products",
-                    subtitle: "Your liked items",
-                    icon: "heart",
-                    color: .red
-                )
-            }
-            
             // Payment Methods
             NavigationLink(destination: PaymentMethodsView()) {
                 ProfileSectionRow(
