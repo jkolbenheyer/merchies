@@ -499,6 +499,7 @@ class FirestoreService {
             }
         } catch {
             completion(nil, error)
+            completion(nil, error)
         }
     }
     
@@ -521,7 +522,9 @@ class FirestoreService {
                     print("📄 Document data: \(document.data())")
                     
                     do {
-                        let order = try document.data(as: Order.self)
+                        var order = try document.data(as: Order.self)
+                        // Ensure the document ID is set correctly
+                        order.setDocumentID(document.documentID)
                         print("✅ Successfully decoded order: ID=\(order.id ?? "nil"), Amount=$\(order.amount)")
                         return order
                     } catch {
@@ -550,7 +553,14 @@ class FirestoreService {
                 }
                 
                 let orders = snapshot?.documents.compactMap { document -> Order? in
-                    try? document.data(as: Order.self)
+                    do {
+                        var order = try document.data(as: Order.self)
+                        order.setDocumentID(document.documentID)
+                        return order
+                    } catch {
+                        print("❌ Failed to decode order from document \(document.documentID): \(error.localizedDescription)")
+                        return nil
+                    }
                 }
                 
                 completion(orders, nil)
@@ -558,18 +568,99 @@ class FirestoreService {
     }
     
     func updateOrderStatus(orderId: String, status: OrderStatus, completion: @escaping (Error?) -> Void) {
+        guard !orderId.isEmpty else {
+            print("❌ FirestoreService.updateOrderStatus: Cannot update order - orderId is empty")
+            let error = NSError(domain: "FirestoreService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Order ID cannot be empty"])
+            completion(error)
+            return
+        }
+        
+        print("🔄 FirestoreService.updateOrderStatus: Updating order \(orderId) to status: \(status.rawValue)")
         db.collection("orders").document(orderId).updateData([
             "status": status.rawValue
         ]) { error in
+            if let error = error {
+                print("❌ FirestoreService.updateOrderStatus: Failed to update order \(orderId): \(error.localizedDescription)")
+            } else {
+                print("✅ FirestoreService.updateOrderStatus: Successfully updated order \(orderId) to \(status.rawValue)")
+            }
+            completion(error)
+        }
+    }
+    
+    func updateOrderAfterPayment(orderId: String, transactionId: String, completion: @escaping (Error?) -> Void) {
+        guard !orderId.isEmpty else {
+            print("❌ FirestoreService.updateOrderAfterPayment: Cannot update order - orderId is empty")
+            let error = NSError(domain: "FirestoreService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Order ID cannot be empty"])
+            completion(error)
+            return
+        }
+        
+        print("🔄 FirestoreService.updateOrderAfterPayment: Updating order \(orderId) after payment")
+        db.collection("orders").document(orderId).updateData([
+            "status": OrderStatus.pendingPickup.rawValue,
+            "transaction_id": transactionId,
+            "payment_status": PaymentStatus.succeeded.rawValue
+        ]) { error in
+            if let error = error {
+                print("❌ FirestoreService.updateOrderAfterPayment: Failed to update order \(orderId): \(error.localizedDescription)")
+            } else {
+                print("✅ FirestoreService.updateOrderAfterPayment: Successfully updated order \(orderId)")
+            }
             completion(error)
         }
     }
     
     func updateOrderQRCode(orderId: String, qrCode: String, completion: @escaping (Error?) -> Void) {
+        guard !orderId.isEmpty else {
+            print("❌ FirestoreService.updateOrderQRCode: Cannot update order - orderId is empty")
+            let error = NSError(domain: "FirestoreService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Order ID cannot be empty"])
+            completion(error)
+            return
+        }
+        
+        print("🔄 FirestoreService.updateOrderQRCode: Updating QR code for order \(orderId)")
         db.collection("orders").document(orderId).updateData([
             "qr_code": qrCode
         ]) { error in
+            if let error = error {
+                print("❌ FirestoreService.updateOrderQRCode: Failed to update QR code for order \(orderId): \(error.localizedDescription)")
+            } else {
+                print("✅ FirestoreService.updateOrderQRCode: Successfully updated QR code for order \(orderId)")
+            }
             completion(error)
         }
+    }
+    
+    func fetchOrderByQRCode(qrCode: String, completion: @escaping (Order?, Error?) -> Void) {
+        print("🔄 FirestoreService.fetchOrderByQRCode: Querying order for QR code: \(qrCode)")
+        
+        db.collection("orders")
+            .whereField("qr_code", isEqualTo: qrCode)
+            .limit(to: 1)
+            .getDocuments { snapshot, error in
+                if let error = error {
+                    print("❌ FirestoreService.fetchOrderByQRCode: Query error: \(error.localizedDescription)")
+                    completion(nil, error)
+                    return
+                }
+                
+                guard let document = snapshot?.documents.first else {
+                    print("❌ FirestoreService.fetchOrderByQRCode: No order found with QR code: \(qrCode)")
+                    completion(nil, nil)
+                    return
+                }
+                
+                do {
+                    var order = try document.data(as: Order.self)
+                    // Ensure the document ID is set correctly
+                    order.setDocumentID(document.documentID)
+                    print("✅ FirestoreService.fetchOrderByQRCode: Found order: ID=\(order.id ?? "nil"), DocumentID=\(document.documentID)")
+                    completion(order, nil)
+                } catch {
+                    print("❌ FirestoreService.fetchOrderByQRCode: Failed to decode order: \(error.localizedDescription)")
+                    completion(nil, error)
+                }
+            }
     }
 }

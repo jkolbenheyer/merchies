@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+  
+    // User profiles - users can read/write only their own data
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Products - read by anyone, write by authenticated merchants/admins
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if request.auth != null && 
+                    get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ["merchant", "admin"];
+    }
+    
+    // Orders - Enhanced rules for QR scanning and merchant analytics
+    match /orders/{orderId} {
+      // Users can read/write their own orders, authenticated users can read any order for QR scanning
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.user_id == request.auth.uid;
+      allow update: if request.auth != null;
+    }
+    
+    // Allow authenticated users to query orders collection (needed for QR scanning and analytics)
+    match /orders/{document=**} {
+      allow list: if request.auth != null;
+    }
+    
+    // Events - read by anyone, write by authenticated users (merchants/admins)
+    match /events/{eventId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && 
+                     (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin" ||
+                      request.auth.uid in resource.data.merchant_ids);
+      allow delete: if request.auth != null && 
+                     (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin" ||
+                      request.auth.uid in resource.data.merchant_ids);
+    }
+    
+    // Bands - read by anyone, write by band owners/members
+    match /bands/{bandId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && 
+                     (request.auth.uid == resource.data.owner_user_id || 
+                      request.auth.uid in resource.data.member_user_ids);
+    }
+  }
+}

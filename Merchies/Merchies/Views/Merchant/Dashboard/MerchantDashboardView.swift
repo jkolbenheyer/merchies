@@ -173,7 +173,8 @@ struct MerchantDashboardView: View {
                     .foregroundColor(.secondary)
             }
             LazyVStack(spacing: 12) {
-                ForEach(eventViewModel.events) { event in
+                ForEach(eventViewModel.events.indices, id: \.self) { index in
+                    let event = eventViewModel.events[index]
                     NavigationLink(destination: EditEventView(vm: SingleEventViewModel(event: event))) {
                         EnhancedEventRow(event: event)
                     }

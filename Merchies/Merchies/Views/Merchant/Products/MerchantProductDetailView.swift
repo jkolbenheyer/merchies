@@ -33,6 +33,19 @@ struct MerchantProductDetailView: View {
     @State private var loadedProductImage: UIImage?
     @State private var isLoadingProductImage = false
     @State private var imageLoadError: String?
+    @State private var showingImagePicker = false
+    @State private var showingCamera = false
+    @State private var showingImageCropper = false
+    @State private var imageForCropping: UIImage?
+    @State private var pendingCropImage: UIImage?  // For delayed cropping after camera
+    @State private var activeSheet: ActiveSheet? = nil
+    
+    enum ActiveSheet: Identifiable {
+        case camera, photoLibrary, imageCropper
+        var id: Int {
+            hashValue
+        }
+    }
     
     // Image upload service
     private let imageUploadService = ImageUploadService()
@@ -122,6 +135,51 @@ struct MerchantProductDetailView: View {
             .sheet(isPresented: $showingEventsList) {
                 AssociatedEventsView(eventIds: product.eventIds)
             }
+            .sheet(item: $activeSheet) { sheetType in
+                switch sheetType {
+                case .camera:
+                    ImagePickerView(selectedImage: $selectedImage, sourceType: .camera)
+                        .onDisappear {
+                            activeSheet = nil
+                            // Give time for sheet to fully dismiss before any other operations
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                if selectedImage != nil {
+                                    handleCameraImageSelection()
+                                }
+                            }
+                        }
+                case .photoLibrary:
+                    ImagePickerView(selectedImage: $selectedImage, sourceType: .photoLibrary)
+                        .onDisappear {
+                            activeSheet = nil
+                            // Give time for sheet to fully dismiss before any other operations
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                if selectedImage != nil {
+                                    handleLibraryImageSelection()
+                                }
+                            }
+                        }
+                case .imageCropper:
+                    if let imageForCropping = imageForCropping {
+                        ImageCropperView(
+                            selectedImage: $selectedImage,
+                            isPresented: Binding(
+                                get: { activeSheet == .imageCropper },
+                                set: { if !$0 { activeSheet = nil } }
+                            ),
+                            originalImage: imageForCropping
+                        )
+                        .onDisappear {
+                            activeSheet = nil
+                            self.imageForCropping = nil
+                            // Re-upload the cropped image if one was selected
+                            if selectedImage != nil {
+                                handleCroppedImageUpload()
+                            }
+                        }
+                    }
+                }
+            }
             .onAppear {
                 setupInitialValues()
                 loadAssociatedEvents()
@@ -170,35 +228,85 @@ struct MerchantProductDetailView: View {
                     ImagePlaceholderCard(showChangeButton: isEditing)
                 }
             }
-            .frame(height: 250)
+            .frame(maxHeight: 300)
             
-            // Image Action Buttons - ENHANCED
+            // Image Action Buttons - ENHANCED WITH CAMERA
             if isEditing {
                 VStack(spacing: 12) {
-                    PhotosPicker(
-                        selection: $pickedItem,
-                        matching: .images,
-                        photoLibrary: .shared()
-                    ) {
-                        HStack {
-                            Image(systemName: "photo")
-                            Text(hasProductImage ? "Change Image" : "Add Image")
-                                .fontWeight(.medium)
-                            if isUploadingImage {
-                                Spacer()
-                                ProgressView()
-                                    .scaleEffect(0.8)
+                    HStack(spacing: 12) {
+                        // Camera Button
+                        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                            Button(action: {
+                                guard activeSheet == nil else { return }
+                                activeSheet = .camera
+                            }) {
+                                HStack {
+                                    Image(systemName: "camera.fill")
+                                    Text("Camera")
+                                        .fontWeight(.medium)
+                                }
+                                .foregroundColor(.purple)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.purple.opacity(0.1))
+                                .cornerRadius(10)
                             }
+                            .disabled(isUploadingImage || activeSheet != nil)
                         }
-                        .foregroundColor(.cyan)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.cyan.opacity(0.1))
-                        .cornerRadius(10)
+                        
+                        // Photo Library Button
+                        Button(action: {
+                            guard activeSheet == nil else { return }
+                            activeSheet = .photoLibrary
+                        }) {
+                            HStack {
+                                Image(systemName: "photo")
+                                Text("Library")
+                                    .fontWeight(.medium)
+                                if isUploadingImage {
+                                    Spacer()
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                }
+                            }
+                            .foregroundColor(isUploadingImage ? .gray : .cyan)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background((isUploadingImage ? Color.gray : Color.cyan).opacity(0.1))
+                            .cornerRadius(10)
+                        }
+                        .disabled(isUploadingImage || activeSheet != nil)
                     }
-                    .disabled(isUploadingImage)
-                    .onChange(of: pickedItem) { newItem in
-                        handleImageSelection(newItem)
+                    
+                    // Crop button (only show when image is selected and no sheets are active)
+                    if (selectedImage != nil || loadedProductImage != nil) && activeSheet == nil {
+                        Button(action: {
+                            guard activeSheet == nil else { return }
+                            imageForCropping = selectedImage ?? loadedProductImage
+                            activeSheet = .imageCropper
+                        }) {
+                            HStack {
+                                Image(systemName: "crop")
+                                Text("Crop Image")
+                                    .fontWeight(.medium)
+                            }
+                            .foregroundColor(.orange)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.orange.opacity(0.1))
+                            .cornerRadius(10)
+                        }
+                        .disabled(isUploadingImage || activeSheet != nil)
+                    }
+                    
+                    if isUploadingImage {
+                        HStack {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                            Text("Uploading image...")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
             }
@@ -690,8 +798,9 @@ struct MerchantProductDetailView: View {
             ZStack {
                 Image(uiImage: image)
                     .resizable()
-                    .scaledToFill()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: 300)
+                    .background(Color(.systemGray6))
                     .cornerRadius(12)
                     .clipped()
                 
@@ -973,6 +1082,60 @@ struct MerchantProductDetailView: View {
     }
     
     // MARK: - Image Handling
+    
+    private func handleCameraImageSelection() {
+        guard let image = selectedImage else { return }
+        
+        isUploadingImage = true
+        loadedProductImage = nil
+        imageLoadError = nil
+        
+        // Convert UIImage to Data and upload
+        if let data = image.jpegData(compressionQuality: 0.8) {
+            Task {
+                await uploadImageData(data)
+            }
+        } else {
+            isUploadingImage = false
+            errorMessage = "Failed to process camera image"
+        }
+    }
+    
+    private func handleCroppedImageUpload() {
+        guard let image = selectedImage else { return }
+        
+        isUploadingImage = true
+        loadedProductImage = nil
+        imageLoadError = nil
+        
+        // Convert cropped UIImage to Data and re-upload
+        if let data = image.jpegData(compressionQuality: 0.8) {
+            Task {
+                await uploadImageData(data)
+            }
+        } else {
+            isUploadingImage = false
+            errorMessage = "Failed to process cropped image"
+        }
+    }
+    
+    private func handleLibraryImageSelection() {
+        guard let image = selectedImage else { return }
+        
+        isUploadingImage = true
+        loadedProductImage = nil
+        imageLoadError = nil
+        
+        // Convert UIImage to Data and upload
+        if let data = image.jpegData(compressionQuality: 0.8) {
+            Task {
+                await uploadImageData(data)
+            }
+        } else {
+            isUploadingImage = false
+            errorMessage = "Failed to process library image"
+        }
+    }
     
     private func handleImageSelection(_ newItem: PhotosPickerItem?) {
         guard let item = newItem else { return }

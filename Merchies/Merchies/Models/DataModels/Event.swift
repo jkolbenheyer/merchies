@@ -40,6 +40,35 @@ struct Event: Identifiable, Codable {
         case maxCapacity   = "max_capacity"
         case ticketPrice   = "ticket_price"
     }
+    
+    // Custom decoder to handle legacy events without product_ids field
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        // Decode required fields
+        self.name = try container.decode(String.self, forKey: .name)
+        self.venueName = try container.decode(String.self, forKey: .venueName)
+        self.address = try container.decode(String.self, forKey: .address)
+        self.startDate = try container.decode(Date.self, forKey: .startDate)
+        self.endDate = try container.decode(Date.self, forKey: .endDate)
+        self.latitude = try container.decode(Double.self, forKey: .latitude)
+        self.longitude = try container.decode(Double.self, forKey: .longitude)
+        self.geofenceRadius = try container.decode(Double.self, forKey: .geofenceRadius)
+        self.active = try container.decode(Bool.self, forKey: .active)
+        self.merchantIds = try container.decode([String].self, forKey: .merchantIds)
+        
+        // Decode optional fields
+        self.imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
+        self.description = try container.decodeIfPresent(String.self, forKey: .description)
+        self.eventType = try container.decodeIfPresent(EventType.self, forKey: .eventType)
+        self.maxCapacity = try container.decodeIfPresent(Int.self, forKey: .maxCapacity)
+        self.ticketPrice = try container.decodeIfPresent(Double.self, forKey: .ticketPrice)
+        
+        // Handle legacy events without product_ids field - this is the key fix
+        self.productIds = try container.decodeIfPresent([String].self, forKey: .productIds) ?? []
+        
+        // Let @DocumentID handle itself through the property wrapper
+    }
 
     init(
         id: String? = nil,

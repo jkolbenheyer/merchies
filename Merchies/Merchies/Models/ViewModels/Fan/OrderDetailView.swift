@@ -146,9 +146,10 @@ struct OrderDetailView: View {
     private func statusBadge(for status: OrderStatus) -> some View {
         let (bg, fg): (Color, Color) = {
             switch status {
-            case .pendingPickup: return (Color.orange.opacity(0.2), .orange)
-            case .pickedUp:      return (Color.green.opacity(0.2),  .green)
-            case .cancelled:     return (Color.red.opacity(0.2),    .red)
+            case .pendingPayment: return (Color.blue.opacity(0.2),   .blue)
+            case .pendingPickup:  return (Color.orange.opacity(0.2), .orange)
+            case .pickedUp:       return (Color.green.opacity(0.2),  .green)
+            case .cancelled:      return (Color.red.opacity(0.2),    .red)
             }
         }()
         Text(status.rawValue

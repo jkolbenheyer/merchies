@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		965106E72DF3279B0055F107 /* Stripe in Frameworks */ = {isa = PBXBuildFile; productRef = 965106E62DF3279B0055F107 /* Stripe */; };
+		965106E92DF3279B0055F107 /* StripeApplePay in Frameworks */ = {isa = PBXBuildFile; productRef = 965106E82DF3279B0055F107 /* StripeApplePay */; };
+		965106EB2DF32CCF0055F107 /* StripePaymentSheet in Frameworks */ = {isa = PBXBuildFile; productRef = 965106EA2DF32CCF0055F107 /* StripePaymentSheet */; };
+		965106ED2DF34B1C0055F107 /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = 965106EC2DF34B1C0055F107 /* FirebaseFunctions */; };
 		96EFC2192DDE27AF0024B3FB /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 96EFC2182DDE27AF0024B3FB /* GoogleService-Info.plist */; };
 		96EFC21A2DDE27AF0024B3FB /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 96EFC2182DDE27AF0024B3FB /* GoogleService-Info.plist */; };
 		96EFC21B2DDE27AF0024B3FB /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 96EFC2182DDE27AF0024B3FB /* GoogleService-Info.plist */; };
@@ -63,8 +67,12 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				965106E72DF3279B0055F107 /* Stripe in Frameworks */,
 				96EFC21E2DDE283F0024B3FB /* FirebaseAnalytics in Frameworks */,
 				96EFC2242DDE290E0024B3FB /* FirebaseStorage in Frameworks */,
+				965106ED2DF34B1C0055F107 /* FirebaseFunctions in Frameworks */,
+				965106E92DF3279B0055F107 /* StripeApplePay in Frameworks */,
+				965106EB2DF32CCF0055F107 /* StripePaymentSheet in Frameworks */,
 				96EFC2202DDE290E0024B3FB /* FirebaseAuth in Frameworks */,
 				96EFC2222DDE290E0024B3FB /* FirebaseFirestore in Frameworks */,
 			);
@@ -132,6 +140,10 @@
 				96EFC21F2DDE290E0024B3FB /* FirebaseAuth */,
 				96EFC2212DDE290E0024B3FB /* FirebaseFirestore */,
 				96EFC2232DDE290E0024B3FB /* FirebaseStorage */,
+				965106E62DF3279B0055F107 /* Stripe */,
+				965106E82DF3279B0055F107 /* StripeApplePay */,
+				965106EA2DF32CCF0055F107 /* StripePaymentSheet */,
+				965106EC2DF34B1C0055F107 /* FirebaseFunctions */,
 			);
 			productName = Merchies;
 			productReference = 96EFC1EE2DDE25570024B3FB /* Merchies.app */;
@@ -217,6 +229,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				96EFC21C2DDE283F0024B3FB /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				965106E52DF3279B0055F107 /* XCRemoteSwiftPackageReference "stripe-ios" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 96EFC1EF2DDE25570024B3FB /* Products */;
@@ -421,8 +434,10 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = CM657PV3QX;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to scan QR codes for order verification.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -448,6 +463,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = CM657PV3QX;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -578,6 +594,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		965106E52DF3279B0055F107 /* XCRemoteSwiftPackageReference "stripe-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/stripe/stripe-ios";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 24.15.0;
+			};
+		};
 		96EFC21C2DDE283F0024B3FB /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
@@ -589,6 +613,26 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		965106E62DF3279B0055F107 /* Stripe */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 965106E52DF3279B0055F107 /* XCRemoteSwiftPackageReference "stripe-ios" */;
+			productName = Stripe;
+		};
+		965106E82DF3279B0055F107 /* StripeApplePay */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 965106E52DF3279B0055F107 /* XCRemoteSwiftPackageReference "stripe-ios" */;
+			productName = StripeApplePay;
+		};
+		965106EA2DF32CCF0055F107 /* StripePaymentSheet */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 965106E52DF3279B0055F107 /* XCRemoteSwiftPackageReference "stripe-ios" */;
+			productName = StripePaymentSheet;
+		};
+		965106EC2DF34B1C0055F107 /* FirebaseFunctions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 96EFC21C2DDE283F0024B3FB /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFunctions;
+		};
 		96EFC21D2DDE283F0024B3FB /* FirebaseAnalytics */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 96EFC21C2DDE283F0024B3FB /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;

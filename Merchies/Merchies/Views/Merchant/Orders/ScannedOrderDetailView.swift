@@ -8,6 +8,8 @@ struct ScannedOrderDetailView: View {
 
     // Local state & services
     @State private var isConfirming = false
+    @State private var showingError = false
+    @State private var errorMessage = ""
     @StateObject private var orderViewModel = OrderViewModel()
     @Environment(\.presentationMode) private var presentationMode
 
@@ -71,9 +73,25 @@ struct ScannedOrderDetailView: View {
                         .font(.subheadline)
                         .foregroundColor(.gray)
 
-                    Text("Total: $\(String(format: "%.2f", order.amount))")
-                        .font(.headline)
-                        .padding(.top, 5)
+                    HStack {
+                        Text("Total: $\(String(format: "%.2f", order.amount))")
+                            .font(.headline)
+                        Spacer()
+                        Text(order.paymentStatus.displayName)
+                            .font(.caption)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.green.opacity(0.2))
+                            .foregroundColor(.green)
+                            .cornerRadius(8)
+                    }
+                    .padding(.top, 5)
+                    
+                    if let transactionId = order.transactionId {
+                        Text("Transaction: \(transactionId.suffix(8).uppercased())")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
                 .padding()
                 .background(Color(.systemGray6))
@@ -125,11 +143,23 @@ struct ScannedOrderDetailView: View {
                     title: Text("Confirm Pickup"),
                     message: Text("Are you sure you want to mark this order as picked up?"),
                     primaryButton: .default(Text("Yes")) {
+                        guard let orderId = order.id, !orderId.isEmpty else {
+                            print("❌ ScannedOrderDetailView: Cannot update order - missing or empty order ID")
+                            // Show error to user
+                            DispatchQueue.main.async {
+                                self.errorMessage = "Error: Order ID is missing. Please try scanning the QR code again."
+                                self.showingError = true
+                            }
+                            return
+                        }
+                        
+                        print("🔄 ScannedOrderDetailView: Updating order status for orderId: \(orderId)")
                         orderViewModel.updateOrderStatus(
-                            orderId: order.id ?? "",
+                            orderId: orderId,
                             status: .pickedUp
                         ) { success in
                             if success {
+                                print("✅ ScannedOrderDetailView: Order status updated successfully")
                                 // Haptic feedback
                                 UINotificationFeedbackGenerator()
                                     .notificationOccurred(.success)
@@ -139,11 +169,22 @@ struct ScannedOrderDetailView: View {
                                     presentationMode.wrappedValue.dismiss()
                                     onComplete()
                                 }
+                            } else {
+                                print("❌ ScannedOrderDetailView: Failed to update order status")
+                                DispatchQueue.main.async {
+                                    self.errorMessage = "Failed to update order status. Please try again."
+                                    self.showingError = true
+                                }
                             }
                         }
                     },
                     secondaryButton: .cancel()
                 )
+            }
+            .alert("Error", isPresented: $showingError) {
+                Button("OK") { }
+            } message: {
+                Text(errorMessage)
             }
         }
     }

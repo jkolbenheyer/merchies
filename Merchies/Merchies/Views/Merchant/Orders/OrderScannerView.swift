@@ -8,49 +8,122 @@ struct OrderScannerView: View {
     @State private var scannedCode: String?
     @State private var showingOrderDetail = false
     @State private var scannedOrder: Order?
+    @State private var showingError = false
+    @State private var errorMessage = ""
+    @State private var hasPermission = true
+    @State private var permissionDenied = false
+    @State private var isLoadingOrder = false
     
     var body: some View {
         NavigationView {
             VStack {
                 if isScanning {
                     ZStack {
-                        QRScannerView(onCodeScanned: { code in
-                            scannedCode = code
-                            isScanning = false
-                            
-                            // In a real app, you would fetch the order from Firestore
-                            // based on the QR code
-                            // For now, we'll simulate finding an order
-                            
-                            // Simulate finding an order
-                            let mockOrder = Order(
-                                id: "order_123456",
-                                userId: "user_abc",
-                                bandId: "band_xyz",
-                                items: [
-                                    OrderItem(productId: "prod_1", size: "M", qty: 1),
-                                    OrderItem(productId: "prod_2", size: "L", qty: 2)
-                                ],
-                                amount: 85.99,
-                                status: .pendingPickup,
-                                qrCode: code,
-                                createdAt: Date()
-                            )
-                            
-                            scannedOrder = mockOrder
-                            showingOrderDetail = true
-                        })
+                        QRScannerView(
+                            onCodeScanned: { code in
+                                // Prevent multiple scans while one is processing
+                                guard !isLoadingOrder else { return }
+                                
+                                scannedCode = code
+                                isLoadingOrder = true
+                                
+                                // Fetch the real order from Firestore based on QR code
+                                print("🔍 OrderScannerView: Fetching order for QR code: \(code)")
+                                
+                                // Add timeout to prevent hanging
+                                let timeoutTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: false) { _ in
+                                    DispatchQueue.main.async {
+                                        if isLoadingOrder {
+                                            isLoadingOrder = false
+                                            isScanning = false
+                                            errorMessage = "Request timed out. Please try scanning again."
+                                            showingError = true
+                                        }
+                                    }
+                                }
+                                
+                                orderViewModel.fetchOrderByQRCode(qrCode: code) { order in
+                                    DispatchQueue.main.async {
+                                        timeoutTimer.invalidate() // Cancel timeout
+                                        isLoadingOrder = false
+                                        isScanning = false
+                                        
+                                        if let order = order, order.id != nil && !order.id!.isEmpty {
+                                            print("✅ OrderScannerView: Order found, setting for display: \(order.id!)")
+                                            scannedOrder = order
+                                            showingOrderDetail = true
+                                        } else {
+                                            print("❌ OrderScannerView: No valid order found for QR code: \(code)")
+                                            errorMessage = "Unable to load order details. Please try scanning again."
+                                            showingError = true
+                                        }
+                                    }
+                                }
+                            },
+                            hasPermission: $hasPermission,
+                            permissionDenied: $permissionDenied
+                        )
                         
-                        VStack {
-                            Spacer()
-                            
-                            Text("Scanning for QR code...")
+                        if hasPermission && !permissionDenied {
+                            VStack {
+                                Spacer()
+                                
+                                if isLoadingOrder {
+                                    VStack(spacing: 16) {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                            .scaleEffect(1.5)
+                                        
+                                        Text("Loading order details...")
+                                            .font(.headline)
+                                            .foregroundColor(.white)
+                                    }
+                                    .padding()
+                                    .background(Color.black.opacity(0.7))
+                                    .cornerRadius(10)
+                                    .padding(.bottom, 50)
+                                } else {
+                                    Text("Scanning for QR code...")
+                                        .font(.headline)
+                                        .foregroundColor(.white)
+                                        .padding()
+                                        .background(Color.black.opacity(0.7))
+                                        .cornerRadius(10)
+                                        .padding(.bottom, 50)
+                                }
+                            }
+                        } else if permissionDenied {
+                            VStack(spacing: 20) {
+                                Spacer()
+                                
+                                Image(systemName: "camera.fill")
+                                    .font(.system(size: 50))
+                                    .foregroundColor(.white)
+                                
+                                Text("Camera Access Required")
+                                    .font(.title2)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.white)
+                                
+                                Text("Please enable camera access in Settings to scan QR codes.")
+                                    .font(.body)
+                                    .foregroundColor(.white)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal)
+                                
+                                Button("Open Settings") {
+                                    if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
+                                        UIApplication.shared.open(settingsUrl)
+                                    }
+                                }
                                 .font(.headline)
                                 .foregroundColor(.white)
                                 .padding()
-                                .background(Color.black.opacity(0.7))
+                                .background(Color.purple)
                                 .cornerRadius(10)
-                                .padding(.bottom, 50)
+                                
+                                Spacer()
+                            }
                         }
                     }
                     .navigationTitle("QR Scanner")
@@ -89,13 +162,57 @@ struct OrderScannerView: View {
                 }
             }
             .sheet(isPresented: $showingOrderDetail) {
-                if let order = scannedOrder {
-                    ScannedOrderDetailView(order: order, onComplete: {
-                        showingOrderDetail = false
-                        scannedOrder = nil
-                        scannedCode = nil
-                    })
+                Group {
+                    if let order = scannedOrder {
+                        ScannedOrderDetailView(order: order, onComplete: {
+                            print("🔍 OrderScannerView: Completing order detail view")
+                            DispatchQueue.main.async {
+                                showingOrderDetail = false
+                                scannedOrder = nil
+                                scannedCode = nil
+                            }
+                        })
+                    } else {
+                        // This should not happen with our improved logic, but provides a fallback
+                        VStack(spacing: 20) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: 50))
+                                .foregroundColor(.orange)
+                            
+                            Text("Order Loading Error")
+                                .font(.headline)
+                            
+                            Text("Unable to load order details. Please try scanning again.")
+                                .font(.body)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal)
+                            
+                            Button("Close") {
+                                DispatchQueue.main.async {
+                                    showingOrderDetail = false
+                                    scannedOrder = nil
+                                    scannedCode = nil
+                                }
+                            }
+                            .padding()
+                            .background(Color.purple)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                        }
+                        .padding()
+                        .onAppear {
+                            print("❌ OrderScannerView: Sheet shown but scannedOrder is nil!")
+                        }
+                    }
                 }
+            }
+            .alert("QR Code Error", isPresented: $showingError) {
+                Button("Try Again") {
+                    isScanning = true
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(errorMessage)
             }
         }
     }

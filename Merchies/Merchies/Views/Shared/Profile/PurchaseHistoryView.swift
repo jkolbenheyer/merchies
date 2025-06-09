@@ -1,5 +1,6 @@
 import SwiftUI
 import Foundation
+import FirebaseStorage
 
 struct PurchaseHistoryView: View {
     let orders: [Order]
@@ -10,13 +11,15 @@ struct PurchaseHistoryView: View {
     
     enum OrderStatusFilter: String, CaseIterable {
         case all = "All"
-        case pending = "Pending"
+        case pendingPayment = "Payment Pending"
+        case pending = "Pending Pickup"
         case pickedUp = "Picked Up"
         case cancelled = "Cancelled"
         
         var orderStatus: OrderStatus? {
             switch self {
             case .all: return nil
+            case .pendingPayment: return .pendingPayment
             case .pending: return .pendingPickup
             case .pickedUp: return .pickedUp
             case .cancelled: return .cancelled
@@ -139,6 +142,12 @@ struct PurchaseHistoryView: View {
         }
         .navigationTitle("Purchase History")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            print("🔍 PurchaseHistoryView.onAppear: Displaying \(orders.count) orders")
+            print("🔍 Filtered orders count: \(filteredOrders.count)")
+            print("🔍 Current filters: Status=\(selectedStatusFilter.rawValue), Time=\(selectedTimeFilter.rawValue)")
+            print("🔍 Search text: '\(searchText)'")
+        }
         .sheet(item: $showingOrderDetail) { order in
             OrderDetailView(order: order)
         }
@@ -231,6 +240,8 @@ struct PurchaseHistoryView: View {
 struct OrderHistoryCard: View {
     let order: Order
     let onTap: () -> Void
+    @State private var productImages: [String: UIImage] = [:]
+    @State private var isLoadingImages = false
     
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -242,16 +253,31 @@ struct OrderHistoryCard: View {
     var body: some View {
         Button(action: onTap) {
             VStack(spacing: 12) {
-                // Order Header
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Order #\(orderNumber)")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
+                // Order Header with Product Images
+                HStack(spacing: 12) {
+                    // Product Images Preview (show first few products)
+                    HStack(spacing: 4) {
+                        ForEach(Array(order.items.prefix(3)), id: \.productId) { item in
+                            ProductImageView(
+                                productId: item.productId,
+                                productImages: $productImages,
+                                size: 40
+                            )
+                        }
                         
-                        Text(Self.dateFormatter.string(from: order.createdAt))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                        if order.items.count > 3 {
+                            ZStack {
+                                Rectangle()
+                                    .fill(Color.gray.opacity(0.3))
+                                    .frame(width: 40, height: 40)
+                                    .cornerRadius(8)
+                                
+                                Text("+\(order.items.count - 3)")
+                                    .font(.caption2)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.primary)
+                            }
+                        }
                     }
                     
                     Spacer()
@@ -266,40 +292,54 @@ struct OrderHistoryCard: View {
                     }
                 }
                 
-                // Order Items Preview
-                VStack(alignment: .leading, spacing: 6) {
+                // Order Info
+                VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("Items (\(order.totalItems))")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Order #\(orderNumber)")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            
+                            Text(Self.dateFormatter.string(from: order.createdAt))
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
                         
                         Spacer()
                         
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    // Show first few items
-                    ForEach(Array(order.items.prefix(3)), id: \.productId) { item in
                         HStack {
-                            Text("• \(item.productTitle ?? "Product") (Size: \(item.size))")
+                            Text("\(order.totalItems) item\(order.totalItems == 1 ? "" : "s")")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
-                                .lineLimit(1)
                             
-                            Spacer()
-                            
-                            Text("x\(item.qty)")
+                            Image(systemName: "chevron.right")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
                     }
                     
-                    if order.items.count > 3 {
-                        Text("+ \(order.items.count - 3) more items")
-                            .font(.caption)
-                            .foregroundColor(.blue)
+                    // Show first few items with better formatting
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(Array(order.items.prefix(2)), id: \.productId) { item in
+                            HStack {
+                                Text("• \(item.productTitle ?? "Product")")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                                
+                                Spacer()
+                                
+                                Text("Size \(item.size) × \(item.qty)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        
+                        if order.items.count > 2 {
+                            Text("+ \(order.items.count - 2) more items...")
+                                .font(.caption)
+                                .foregroundColor(.blue)
+                        }
                     }
                 }
             }
@@ -309,10 +349,92 @@ struct OrderHistoryCard: View {
             .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
         }
         .buttonStyle(PlainButtonStyle())
+        .onAppear {
+            loadProductImages()
+        }
     }
     
     private var orderNumber: String {
         order.id?.suffix(6).uppercased() ?? "UNKNOWN"
+    }
+    
+    private func loadProductImages() {
+        guard !isLoadingImages else { return }
+        isLoadingImages = true
+        
+        let firestoreService = FirestoreService()
+        
+        // Get unique product IDs from the order
+        let productIds = Array(Set(order.items.map { $0.productId }))
+        
+        for productId in productIds.prefix(3) { // Only load first 3 images
+            firestoreService.fetchProductById(productId: productId) { product, error in
+                DispatchQueue.main.async {
+                    if let product = product, !product.imageUrl.isEmpty {
+                        self.loadImageFromUrl(product.imageUrl, for: productId)
+                    }
+                }
+            }
+        }
+    }
+    
+    private func loadImageFromUrl(_ imageUrl: String, for productId: String) {
+        // Safe Firebase Storage loading with URL type detection
+        if imageUrl.contains("firebasestorage.googleapis.com") {
+            // Use Firebase Storage reference for Firebase URLs
+            let storageRef = Storage.storage().reference(forURL: imageUrl)
+            storageRef.getData(maxSize: 5 * 1024 * 1024) { data, error in
+                DispatchQueue.main.async {
+                    if let error = error {
+                        print("❌ Error loading product image from Firebase: \(error.localizedDescription)")
+                    } else if let data = data, let image = UIImage(data: data) {
+                        self.productImages[productId] = image
+                    }
+                }
+            }
+        } else {
+            // Use URLSession for regular HTTP URLs
+            guard let url = URL(string: imageUrl) else { return }
+            
+            URLSession.shared.dataTask(with: url) { data, response, error in
+                DispatchQueue.main.async {
+                    if let data = data, let image = UIImage(data: data) {
+                        self.productImages[productId] = image
+                    }
+                }
+            }.resume()
+        }
+    }
+}
+
+// MARK: - Product Image View Component
+
+struct ProductImageView: View {
+    let productId: String
+    @Binding var productImages: [String: UIImage]
+    let size: CGFloat
+    
+    var body: some View {
+        Group {
+            if let image = productImages[productId] {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: size, height: size)
+                    .cornerRadius(8)
+                    .clipped()
+            } else {
+                Rectangle()
+                    .fill(Color.purple.opacity(0.2))
+                    .frame(width: size, height: size)
+                    .cornerRadius(8)
+                    .overlay(
+                        Image(systemName: "tshirt")
+                            .font(.system(size: size * 0.4))
+                            .foregroundColor(.purple)
+                    )
+            }
+        }
     }
 }
 
@@ -336,6 +458,8 @@ struct OrderStatusBadge: View {
     
     private var statusInfo: (String, Color) {
         switch status {
+        case .pendingPayment:
+            return ("Payment Pending", .blue)
         case .pendingPickup:
             return ("Pending", .orange)
         case .pickedUp:

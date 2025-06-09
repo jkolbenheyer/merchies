@@ -71,7 +71,7 @@ struct CartView: View {
                         }
                         
                         Button(action: {
-                            showingPaymentSheet = true
+                            processDirectPayment()
                         }) {
                             Text("Checkout")
                                 .font(.headline)
@@ -103,57 +103,120 @@ struct CartView: View {
                 }
             }
             .sheet(isPresented: $showingPaymentSheet) {
-                // In a real app, you would integrate with Stripe SDK here
-                VStack {
-                    Text("Payment Processing")
-                        .font(.title)
-                        .padding()
-                    
-                    ProgressView()
-                        .scaleEffect(1.5)
-                        .padding()
-                    
-                    Text("This is a simulated payment flow")
-                        .foregroundColor(.gray)
-                        .padding()
-                    
-                    Button("Complete Payment") {
-                        if let user = authViewModel.user, let firstItem = cartViewModel.cartItems.first {
-                            // Use the first item's band ID for the order
-                            let bandId = firstItem.product.bandId
-                            
-                            // Create the order
-                            orderViewModel.createOrder(
-                                from: cartViewModel.cartItems,
-                                userId: user.uid,
-                                bandId: bandId,
-                                eventId: currentEventId,
-                                total: cartViewModel.total
-                            ) { orderId in
-                                if let orderId = orderId {
-                                    newOrderId = orderId
-                                    showingOrderConfirmation = true
-                                    showingPaymentSheet = false
-                                    cartViewModel.clearCart()
+                StripePaymentView(
+                    amount: cartViewModel.total,
+                    onCompletion: { result in
+                        switch result {
+                        case .success(let paymentResult):
+                            // Payment successful, create the order
+                            if let user = authViewModel.user, let firstItem = cartViewModel.cartItems.first {
+                                let bandId = firstItem.product.bandId
+                                
+                                orderViewModel.createOrder(
+                                    from: cartViewModel.cartItems,
+                                    userId: user.uid,
+                                    bandId: bandId,
+                                    eventId: currentEventId,
+                                    total: cartViewModel.total,
+                                    transactionId: paymentResult.transactionId
+                                ) { orderId in
+                                    if let orderId = orderId {
+                                        print("✅ Legacy flow: Order created successfully: \(orderId)")
+                                        newOrderId = orderId
+                                        cartViewModel.clearCart()
+                                        showingPaymentSheet = false
+                                        
+                                        // Small delay to ensure proper sheet transition
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                            showingOrderConfirmation = true
+                                        }
+                                    }
                                 }
                             }
+                        case .failure(let error):
+                            // Handle payment failure
+                            print("Payment failed: \(error.localizedDescription)")
+                            showingPaymentSheet = false
                         }
-                    }
-                    .padding()
-                    .background(Color.purple)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-                    .padding()
-                    
-                    Button("Cancel") {
+                    },
+                    onCancel: {
                         showingPaymentSheet = false
                     }
-                    .padding()
-                }
+                )
                 .presentationDetents([.medium])
             }
             .sheet(isPresented: $showingOrderConfirmation) {
                 OrderConfirmationView(orderId: newOrderId ?? "")
+                    .onAppear {
+                        print("📱 OrderConfirmationView sheet appeared with order ID: \(newOrderId ?? "nil")")
+                    }
+            }
+        }
+    }
+    
+    // Process payment with proper order creation flow
+    private func processDirectPayment() {
+        guard let user = authViewModel.user, let firstItem = cartViewModel.cartItems.first else {
+            print("❌ User not authenticated or cart is empty")
+            return
+        }
+        
+        let bandId = firstItem.product.bandId
+        
+        // Step 1: Create order with "pending_payment" status
+        orderViewModel.createOrder(
+            from: cartViewModel.cartItems,
+            userId: user.uid,
+            bandId: bandId,
+            eventId: currentEventId,
+            total: cartViewModel.total,
+            transactionId: nil, // No transaction ID yet
+            status: .pendingPayment // New status for unpaid orders
+        ) { orderId in
+            guard let orderId = orderId else {
+                print("❌ Failed to create order")
+                return
+            }
+            
+            print("✅ Order created with ID: \(orderId), proceeding to payment")
+            
+            // Step 2: Process payment with the real order ID
+            print("🚀 Processing payment for order: \(orderId)")
+            PaymentService.shared.processPayment(amount: cartViewModel.total, orderId: orderId) { result in
+                print("🎯 Payment result received in CartView: \(result)")
+                DispatchQueue.main.async {
+                    switch result {
+                    case .success(let paymentResult):
+                        print("✅ Payment successful! Transaction ID: \(paymentResult.transactionId)")
+                        // Step 3: Update order with transaction ID and mark as paid
+                        orderViewModel.updateOrderAfterPayment(
+                            orderId: orderId,
+                            transactionId: paymentResult.transactionId
+                        ) { success in
+                            DispatchQueue.main.async {
+                                if success {
+                                    print("✅ Order updated successfully, showing order confirmation for order: \(orderId)")
+                                    newOrderId = orderId
+                                    cartViewModel.clearCart()
+                                    
+                                    // Small delay to ensure proper sheet presentation
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                        print("📱 Setting showingOrderConfirmation to true")
+                                        showingOrderConfirmation = true
+                                    }
+                                } else {
+                                    print("❌ Failed to update order after payment")
+                                }
+                            }
+                        }
+                    case .failure(let error):
+                        // Step 4: Handle payment failure - mark order as failed
+                        print("❌ Payment failed in CartView: \(error.localizedDescription)")
+                        orderViewModel.updateOrderStatus(orderId: orderId, status: .cancelled) { _ in
+                            // Order marked as cancelled
+                        }
+                    }
+                }
             }
         }
     }

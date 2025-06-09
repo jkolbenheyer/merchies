@@ -81,7 +81,7 @@ class OrderViewModel: ObservableObject {
     
     // MARK: - Create Order
     
-    func createOrder(from cartItems: [CartItem], userId: String, bandId: String, eventId: String?, total: Double, completion: @escaping (String?) -> Void) {
+    func createOrder(from cartItems: [CartItem], userId: String, bandId: String, eventId: String?, total: Double, transactionId: String? = nil, status: OrderStatus = .pendingPickup, completion: @escaping (String?) -> Void) {
         print("🔄 OrderViewModel: Creating order for userId: \(userId)")
         print("🔄 OrderViewModel: Cart items count: \(cartItems.count)")
         print("🔄 OrderViewModel: Total amount: $\(total)")
@@ -111,8 +111,10 @@ class OrderViewModel: ObservableObject {
             eventId: eventId, // Set the actual event ID
             items: orderItems,
             amount: total,
-            status: .pendingPickup,
+            status: status,
             qrCode: qrCode,
+            transactionId: transactionId,
+            paymentStatus: transactionId != nil ? .succeeded : .pending,
             createdAt: Date()
         )
         
@@ -149,6 +151,46 @@ class OrderViewModel: ObservableObject {
                 }
                 
                 completion(orderId)
+            }
+        }
+    }
+    
+    // MARK: - Fetch Order by QR Code
+    
+    func fetchOrderByQRCode(qrCode: String, completion: @escaping (Order?) -> Void) {
+        firestoreService.fetchOrderByQRCode(qrCode: qrCode) { order, error in
+            if let error = error {
+                print("❌ OrderViewModel: Error fetching order by QR code: \(error.localizedDescription)")
+                completion(nil)
+                return
+            }
+            completion(order)
+        }
+    }
+    
+    // MARK: - Update Order After Payment
+    
+    func updateOrderAfterPayment(orderId: String, transactionId: String, completion: @escaping (Bool) -> Void) {
+        print("🔄 OrderViewModel: Updating order \(orderId) after successful payment")
+        
+        firestoreService.updateOrderAfterPayment(orderId: orderId, transactionId: transactionId) { [weak self] error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    print("❌ OrderViewModel: Failed to update order after payment: \(error.localizedDescription)")
+                    self?.error = error.localizedDescription
+                    completion(false)
+                    return
+                }
+                
+                // Update the order in the local array
+                if let index = self?.orders.firstIndex(where: { $0.id == orderId }) {
+                    self?.orders[index].status = .pendingPickup
+                    self?.orders[index].transactionId = transactionId
+                    self?.orders[index].paymentStatus = .succeeded
+                }
+                
+                print("✅ OrderViewModel: Order updated after payment")
+                completion(true)
             }
         }
     }

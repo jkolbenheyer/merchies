@@ -57,15 +57,18 @@ class ImageUploadService: ObservableObject {
             // Get download URL
             storageRef.downloadURL { url, error in
                 if let error = error {
+                    print("❌ ImageUploadService: Failed to get download URL: \(error.localizedDescription)")
                     completion(.failure(error))
                     return
                 }
                 
                 guard let downloadURL = url else {
+                    print("❌ ImageUploadService: Download URL is nil")
                     completion(.failure(ImageUploadError.urlRetrievalFailed))
                     return
                 }
                 
+                print("✅ ImageUploadService: Generated download URL: \(downloadURL.absoluteString)")
                 completion(.success(downloadURL.absoluteString))
             }
         }

@@ -1,5 +1,6 @@
 import SwiftUI
 import Foundation
+import AuthenticationServices
 
 struct AuthView: View {
     @State private var isSignIn = true
@@ -22,50 +23,68 @@ struct AuthView: View {
                             .frame(width: 150, height: 150)
                             .padding(.top, 50)
 
-                        // Form fields
-                        VStack(spacing: 15) {
-                            TextField("Email", text: $email)
-                                .keyboardType(.emailAddress)
-                                .autocapitalization(.none)
-                                .padding()
-                                .background(Color(.systemGray6))
-                                .cornerRadius(8)
-
-                            SecureField(isSignIn ? "Password" : "Create Password", text: $password)
-                                .padding()
-                                .background(Color(.systemGray6))
-                                .cornerRadius(8)
-
-                            Button(action: {
-                                if isSignIn {
-                                    authViewModel.signInWithEmail(email: email, password: password)
-                                } else {
-                                    authViewModel.createAccount(email: email, password: password)
-                                }
-                            }) {
-                                Text(isSignIn ? "Sign In" : "Create Account")
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(Color.cyan)
-                                    .cornerRadius(8)
-                            }
-                            .disabled(email.isEmpty || password.isEmpty || authViewModel.isLoading)
-
+                        // Authentication options
+                        VStack(spacing: 20) {
+                            // Apple Sign In (Primary option)
                             Button(action: {
                                 authViewModel.signInWithApple()
                             }) {
                                 HStack {
                                     Image(systemName: "apple.logo")
+                                        .font(.title2)
                                     Text("Sign in with Apple")
+                                        .fontWeight(.semibold)
                                 }
-                                .fontWeight(.semibold)
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
-                                .padding()
+                                .frame(height: 55)
                                 .background(Color.black)
                                 .cornerRadius(8)
+                            }
+                            
+                            HStack {
+                                Rectangle()
+                                    .fill(Color.gray.opacity(0.5))
+                                    .frame(height: 1)
+                                Text("or")
+                                    .foregroundColor(.gray)
+                                    .font(.caption)
+                                Rectangle()
+                                    .fill(Color.gray.opacity(0.5))
+                                    .frame(height: 1)
+                            }
+                            .padding(.vertical, 8)
+                            
+                            // Email/Password form
+                            VStack(spacing: 15) {
+                                TextField("Email", text: $email)
+                                    .keyboardType(.emailAddress)
+                                    .autocapitalization(.none)
+                                    .padding()
+                                    .background(Color(.systemGray6))
+                                    .cornerRadius(8)
+
+                                SecureField(isSignIn ? "Password" : "Create Password", text: $password)
+                                    .padding()
+                                    .background(Color(.systemGray6))
+                                    .cornerRadius(8)
+
+                                Button(action: {
+                                    if isSignIn {
+                                        authViewModel.signInWithEmail(email: email, password: password)
+                                    } else {
+                                        authViewModel.createAccount(email: email, password: password)
+                                    }
+                                }) {
+                                    Text(isSignIn ? "Sign In with Email" : "Create Account with Email")
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .padding()
+                                        .background(Color.cyan)
+                                        .cornerRadius(8)
+                                }
+                                .disabled(email.isEmpty || password.isEmpty || authViewModel.isLoading)
                             }
 
                             Button(action: {

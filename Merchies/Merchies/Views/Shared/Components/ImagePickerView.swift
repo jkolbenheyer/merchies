@@ -13,6 +13,10 @@ struct ImagePickerView: UIViewControllerRepresentable {
         let picker = UIImagePickerController()
         picker.sourceType = sourceType
         picker.delegate = context.coordinator
+        
+        // Debug logging to verify source type
+        print("📸 ImagePickerView: Setting source type to \(sourceType == .camera ? "camera" : "photoLibrary")")
+        
         return picker
     }
     

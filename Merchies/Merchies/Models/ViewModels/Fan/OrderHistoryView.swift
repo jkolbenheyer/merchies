@@ -263,6 +263,14 @@ struct OrderRowView: View {
                     .onTapGesture {
                         onTapQRCode()
                     }
+                } else if order.status == .pendingPayment {
+                    HStack(spacing: 4) {
+                        Image(systemName: "creditcard")
+                            .font(.caption)
+                        Text("Payment pending")
+                            .font(.caption)
+                    }
+                    .foregroundColor(.blue)
                 }
             }
         }
@@ -280,9 +288,10 @@ struct OrderRowView: View {
     private func statusBadge(for status: OrderStatus) -> some View {
         let (bg, fg): (Color, Color) = {
             switch status {
-            case .pendingPickup: return (Color.orange.opacity(0.2), .orange)
-            case .pickedUp:      return (Color.green.opacity(0.2),  .green)
-            case .cancelled:     return (Color.red.opacity(0.2),    .red)
+            case .pendingPayment: return (Color.blue.opacity(0.2),   .blue)
+            case .pendingPickup:  return (Color.orange.opacity(0.2), .orange)
+            case .pickedUp:       return (Color.green.opacity(0.2),  .green)
+            case .cancelled:      return (Color.red.opacity(0.2),    .red)
             }
         }()
         

@@ -1,4 +1,8 @@
 import SwiftUI
+import Firebase
+import FirebaseAuth
+import FirebaseFirestore
+import PhotosUI
 
 struct AccountSettingsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
@@ -181,12 +185,72 @@ struct ChangePasswordView: View {
 
 struct EditProfileView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
+    @StateObject private var imageUploadService = ImageUploadService()
     @State private var displayName = ""
     @State private var bio = ""
+    @State private var profileImage: UIImage?
+    @State private var showingImagePicker = false
     @State private var showingSuccess = false
+    @State private var isLoading = false
+    @State private var errorMessage: String?
     
     var body: some View {
         Form {
+            Section(header: Text("Profile Picture")) {
+                VStack(spacing: 16) {
+                    // Profile Picture Display
+                    Button(action: { showingImagePicker = true }) {
+                        ZStack {
+                            if let profileImage = profileImage {
+                                Image(uiImage: profileImage)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 100, height: 100)
+                                    .clipShape(Circle())
+                            } else {
+                                Circle()
+                                    .fill(Color.purple.opacity(0.2))
+                                    .frame(width: 100, height: 100)
+                                    .overlay(
+                                        Text(profileInitials)
+                                            .font(.title)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.purple)
+                                    )
+                            }
+                            
+                            // Camera overlay
+                            Circle()
+                                .fill(Color.black.opacity(0.6))
+                                .frame(width: 100, height: 100)
+                                .opacity(0.8)
+                                .overlay(
+                                    Image(systemName: "camera.fill")
+                                        .font(.title2)
+                                        .foregroundColor(.white)
+                                )
+                        }
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    
+                    Button("Change Profile Picture") {
+                        showingImagePicker = true
+                    }
+                    .font(.subheadline)
+                    .foregroundColor(.purple)
+                    
+                    if profileImage != nil {
+                        Button("Remove Picture") {
+                            profileImage = nil
+                        }
+                        .font(.subheadline)
+                        .foregroundColor(.red)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+            }
+            
             Section(header: Text("Profile Information")) {
                 TextField("Display Name", text: $displayName)
                 
@@ -198,25 +262,218 @@ struct EditProfileView: View {
                 Button("Save Changes") {
                     saveProfile()
                 }
-                .disabled(displayName.isEmpty)
+                .disabled((displayName.isEmpty && profileImage == nil) || isLoading)
+                
+                if isLoading {
+                    HStack {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                        Text("Saving...")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            
+            if let error = errorMessage {
+                Section {
+                    Text(error)
+                        .foregroundColor(.red)
+                        .font(.subheadline)
+                }
             }
         }
         .navigationTitle("Edit Profile")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
-            displayName = authViewModel.user?.displayName ?? ""
+            loadCurrentProfile()
+        }
+        .onChange(of: profileImage) { newImage in
+            print("🔍 EditProfileView: profileImage changed to: \(newImage != nil ? "UIImage" : "nil")")
+        }
+        .sheet(isPresented: $showingImagePicker) {
+            ProfileImagePickerSheet(
+                selectedImage: $profileImage,
+                isPresented: $showingImagePicker
+            )
         }
         .alert("Profile Updated", isPresented: $showingSuccess) {
             Button("OK") { }
         } message: {
             Text("Your profile has been successfully updated.")
         }
+        .alert("Error", isPresented: .constant(errorMessage != nil), actions: {
+            Button("OK") {
+                errorMessage = nil
+            }
+        }, message: {
+            Text(errorMessage ?? "")
+        })
+    }
+    
+    private var profileInitials: String {
+        let name = displayName.isEmpty ? (authViewModel.user?.displayName ?? "User") : displayName
+        let components = name.components(separatedBy: " ")
+        if components.count >= 2 {
+            return "\(components[0].prefix(1))\(components[1].prefix(1))".uppercased()
+        } else {
+            return String(name.prefix(2)).uppercased()
+        }
+    }
+    
+    private func loadCurrentProfile() {
+        displayName = authViewModel.user?.displayName ?? ""
+        
+        // Try to load existing profile picture from Firebase Auth
+        if let photoURL = authViewModel.user?.photoURL {
+            loadImageFromURL(photoURL)
+        }
+        
+        // TODO: Load bio and other profile data from Firestore user document
+    }
+    
+    private func loadImageFromURL(_ url: URL) {
+        URLSession.shared.dataTask(with: url) { data, response, error in
+            DispatchQueue.main.async {
+                if let data = data, let image = UIImage(data: data) {
+                    self.profileImage = image
+                }
+            }
+        }.resume()
     }
     
     private func saveProfile() {
-        // Mock profile save
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            showingSuccess = true
+        guard let user = authViewModel.user else { 
+            print("❌ EditProfileView: No user found in authViewModel")
+            return 
+        }
+        
+        print("🔍 EditProfileView: Starting saveProfile for user: \(user.uid)")
+        print("🔍 EditProfileView: Profile image exists: \(profileImage != nil)")
+        print("🔍 EditProfileView: Display name: '\(displayName)'")
+        
+        isLoading = true
+        errorMessage = nil
+        
+        // If we have a new profile image, upload it first
+        if profileImage != nil {
+            print("🔍 EditProfileView: Has profile image - starting upload process")
+            uploadProfileImage(for: user.uid) { [self] result in
+                switch result {
+                case .success(let imageUrl):
+                    print("✅ EditProfileView: Image upload successful, updating profile with URL: \(imageUrl)")
+                    updateUserProfile(userId: user.uid, photoURL: imageUrl)
+                case .failure(let error):
+                    print("❌ EditProfileView: Image upload failed: \(error.localizedDescription)")
+                    DispatchQueue.main.async {
+                        self.isLoading = false
+                        self.errorMessage = "Failed to upload image: \(error.localizedDescription)"
+                    }
+                }
+            }
+        } else {
+            print("🔍 EditProfileView: No profile image - updating profile without photo")
+            updateUserProfile(userId: user.uid, photoURL: nil)
+        }
+    }
+    
+    private func uploadProfileImage(for userId: String, completion: @escaping (Result<String, Error>) -> Void) {
+        guard let image = profileImage else {
+            print("❌ EditProfileView: No profile image to upload")
+            completion(.failure(ImageUploadError.compressionFailed))
+            return
+        }
+        
+        print("🔍 EditProfileView: Starting profile image upload for user: \(userId)")
+        imageUploadService.uploadImage(image, type: .profile, id: userId) { result in
+            switch result {
+            case .success(let imageUrl):
+                print("✅ EditProfileView: Profile image uploaded successfully: \(imageUrl)")
+                completion(.success(imageUrl))
+            case .failure(let error):
+                print("❌ EditProfileView: Profile image upload failed: \(error.localizedDescription)")
+                completion(.failure(error))
+            }
+        }
+    }
+    
+    private func updateUserProfile(userId: String, photoURL: String?) {
+        print("🔍 EditProfileView: Updating user profile with photoURL: \(photoURL ?? "none")")
+        
+        // Update Firebase Auth profile
+        let changeRequest = authViewModel.user?.createProfileChangeRequest()
+        
+        // Only update displayName if it's not empty
+        if !displayName.isEmpty {
+            changeRequest?.displayName = displayName
+            print("🔍 EditProfileView: Setting displayName in Firebase Auth: \(displayName)")
+        }
+        
+        if let photoURL = photoURL {
+            changeRequest?.photoURL = URL(string: photoURL)
+            print("🔍 EditProfileView: Setting photoURL in Firebase Auth: \(photoURL)")
+        }
+        
+        changeRequest?.commitChanges { error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    print("❌ EditProfileView: Failed to update Firebase Auth profile: \(error.localizedDescription)")
+                    print("❌ EditProfileView: Error code: \((error as NSError).code)")
+                    print("❌ EditProfileView: Error domain: \((error as NSError).domain)")
+                    self.isLoading = false
+                    self.errorMessage = "Failed to update profile: \(error.localizedDescription)"
+                    return
+                }
+                
+                print("✅ EditProfileView: Firebase Auth profile updated successfully")
+                print("🔍 EditProfileView: Checking updated photoURL...")
+                
+                // Verify the update worked
+                let updatedUser = Auth.auth().currentUser
+                print("🔍 EditProfileView: Current user photoURL: \(updatedUser?.photoURL?.absoluteString ?? "none")")
+                print("🔍 EditProfileView: Current user displayName: \(updatedUser?.displayName ?? "none")")
+                
+                // Update Firestore user document
+                self.updateFirestoreProfile(userId: userId, photoURL: photoURL)
+            }
+        }
+    }
+    
+    private func updateFirestoreProfile(userId: String, photoURL: String?) {
+        print("🔍 EditProfileView: Updating Firestore profile with photoURL: \(photoURL ?? "none")")
+        
+        let db = Firestore.firestore()
+        var updateData: [String: Any] = [
+            "last_active_at": FieldValue.serverTimestamp()
+        ]
+        
+        // Only update display_name if it's not empty
+        if !displayName.isEmpty {
+            updateData["display_name"] = displayName
+        }
+        
+        if let photoURL = photoURL {
+            updateData["photo_url"] = photoURL
+            print("🔍 EditProfileView: Adding photo_url to Firestore: \(photoURL)")
+        }
+        
+        // TODO: Add bio field when we extend the UserProfile model
+        
+        db.collection("users").document(userId).updateData(updateData) { error in
+            DispatchQueue.main.async {
+                self.isLoading = false
+                
+                if let error = error {
+                    print("❌ EditProfileView: Failed to update Firestore: \(error.localizedDescription)")
+                    self.errorMessage = "Profile updated but failed to sync: \(error.localizedDescription)"
+                } else {
+                    print("✅ EditProfileView: Firestore profile updated successfully")
+                    self.showingSuccess = true
+                    // Refresh the user data in AuthViewModel to trigger UI updates
+                    print("🔍 EditProfileView: Calling authViewModel.refreshUser()")
+                    self.authViewModel.refreshUser()
+                }
+            }
         }
     }
 }
@@ -377,6 +634,214 @@ struct ContactUsView: View {
     private func sendMessage() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
             showingSuccess = true
+        }
+    }
+}
+
+// MARK: - Profile Image Picker Sheet
+
+struct ProfileImagePickerSheet: View {
+    @Binding var selectedImage: UIImage?
+    @Binding var isPresented: Bool
+    @State private var showingCamera = false
+    @State private var showingPhotoLibrary = false
+    @State private var showingConfirmation = false
+    @State private var tempSelectedImage: UIImage?
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 32) {
+                // Current/Preview Image
+                VStack(spacing: 16) {
+                    ZStack {
+                        if let image = tempSelectedImage ?? selectedImage {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 120, height: 120)
+                                .clipShape(Circle())
+                        } else {
+                            Circle()
+                                .fill(Color.gray.opacity(0.2))
+                                .frame(width: 120, height: 120)
+                                .overlay(
+                                    Image(systemName: "person.fill")
+                                        .font(.system(size: 50))
+                                        .foregroundColor(.gray)
+                                )
+                        }
+                    }
+                    
+                    if tempSelectedImage != nil {
+                        Text("Preview")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                // Action Buttons
+                VStack(spacing: 16) {
+                    // Camera Button
+                    if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                        Button(action: { showingCamera = true }) {
+                            HStack {
+                                Image(systemName: "camera.fill")
+                                Text("Take Photo")
+                            }
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.purple)
+                            .cornerRadius(12)
+                        }
+                    }
+                    
+                    // Photo Library Button
+                    Button(action: { showingPhotoLibrary = true }) {
+                        HStack {
+                            Image(systemName: "photo.on.rectangle")
+                            Text("Choose from Library")
+                        }
+                        .font(.headline)
+                        .foregroundColor(.purple)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.purple.opacity(0.1))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.purple, lineWidth: 1)
+                        )
+                        .cornerRadius(12)
+                    }
+                    
+                    // Remove Photo Button (if there's a current image)
+                    if selectedImage != nil {
+                        Button(action: { 
+                            showingConfirmation = true
+                        }) {
+                            HStack {
+                                Image(systemName: "trash")
+                                Text("Remove Photo")
+                            }
+                            .font(.headline)
+                            .foregroundColor(.red)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.red.opacity(0.1))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.red, lineWidth: 1)
+                            )
+                            .cornerRadius(12)
+                        }
+                    }
+                }
+                .padding(.horizontal, 32)
+                
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("Profile Picture")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        tempSelectedImage = nil
+                        isPresented = false
+                    }
+                }
+                
+                if tempSelectedImage != nil {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Done") {
+                            print("🔍 ProfileImagePickerSheet: Done button tapped, setting selectedImage")
+                            selectedImage = tempSelectedImage
+                            print("🔍 ProfileImagePickerSheet: selectedImage set to: \(selectedImage != nil ? "UIImage" : "nil")")
+                            tempSelectedImage = nil
+                            isPresented = false
+                        }
+                        .fontWeight(.semibold)
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showingCamera) {
+            ImagePickerView(selectedImage: $tempSelectedImage, sourceType: .camera)
+        }
+        .sheet(isPresented: $showingPhotoLibrary) {
+            if #available(iOS 14.0, *) {
+                ModernPhotoPickerView(selectedImage: $tempSelectedImage)
+            } else {
+                ImagePickerView(selectedImage: $tempSelectedImage, sourceType: .photoLibrary)
+            }
+        }
+        .confirmationDialog("Remove Profile Picture", isPresented: $showingConfirmation) {
+            Button("Remove Photo", role: .destructive) {
+                selectedImage = nil
+                tempSelectedImage = nil
+                isPresented = false
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Are you sure you want to remove your profile picture?")
+        }
+    }
+}
+
+// MARK: - Modern Photo Picker (iOS 14+)
+
+@available(iOS 14.0, *)
+struct ModernPhotoPickerView: View {
+    @Binding var selectedImage: UIImage?
+    @State private var selectedItem: PhotosPickerItem?
+    @Environment(\.presentationMode) var presentationMode
+    
+    var body: some View {
+        NavigationView {
+            VStack {
+                PhotosPicker(
+                    selection: $selectedItem,
+                    matching: .images,
+                    photoLibrary: .shared()
+                ) {
+                    VStack(spacing: 20) {
+                        Image(systemName: "photo.on.rectangle")
+                            .font(.system(size: 60))
+                            .foregroundColor(.purple)
+                        
+                        Text("Select Photo")
+                            .font(.headline)
+                            .foregroundColor(.purple)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .onChange(of: selectedItem) { newItem in
+                    print("🔍 ModernPhotoPickerView: selectedItem changed: \(newItem != nil)")
+                    Task {
+                        if let data = try? await newItem?.loadTransferable(type: Data.self),
+                           let image = UIImage(data: data) {
+                            print("✅ ModernPhotoPickerView: Successfully loaded image data")
+                            await MainActor.run {
+                                selectedImage = image
+                                print("🔍 ModernPhotoPickerView: selectedImage set and dismissing")
+                                presentationMode.wrappedValue.dismiss()
+                            }
+                        } else {
+                            print("❌ ModernPhotoPickerView: Failed to load image data")
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Select Photo")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        presentationMode.wrappedValue.dismiss()
+                    }
+                }
+            }
         }
     }
 }

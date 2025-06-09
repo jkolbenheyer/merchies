@@ -370,11 +370,16 @@ struct FanDashboardView: View {
 
     @ViewBuilder
     private func nearbyEventsList() -> some View {
+        let activeEvents = eventViewModel.events.filter { event in
+            // Only show active or upcoming events, hide ended events
+            event.isActive || event.isUpcoming
+        }
+        
         VStack(alignment: .leading, spacing: 16) {
             Text("Nearby Events")
                 .font(.title2)
                 .fontWeight(.bold)
-            ForEach(eventViewModel.events) { event in
+            ForEach(activeEvents) { event in
                 Button {
                     locationService.inEventGeofence = true
                     locationService.currentEvent    = event

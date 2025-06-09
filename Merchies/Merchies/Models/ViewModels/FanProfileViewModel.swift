@@ -15,6 +15,7 @@ class FanProfileViewModel: ObservableObject {
     private let firestoreService = FirestoreService()
     
     func loadProfileData(userId: String) {
+        print("🔍 FanProfileViewModel.loadProfileData: Starting load for userId: \(userId)")
         isLoading = true
         
         // Load orders and calculate stats
@@ -23,13 +24,19 @@ class FanProfileViewModel: ObservableObject {
     }
     
     private func loadOrders(userId: String) {
+        print("🔍 FanProfileViewModel.loadOrders: Calling fetchOrders for userId: \(userId)")
         firestoreService.fetchOrders(for: userId) { [weak self] orders, error in
             DispatchQueue.main.async {
                 if let orders = orders {
+                    print("✅ FanProfileViewModel.loadOrders: Received \(orders.count) orders")
+                    print("🔍 Order details:")
+                    for (index, order) in orders.enumerated() {
+                        print("   Order \(index + 1): ID=\(order.id ?? "nil"), Amount=$\(order.amount), Status=\(order.status), Items=\(order.items.count)")
+                    }
                     self?.orders = orders
                     self?.calculateSpendingStats()
                 } else if let error = error {
-                    print("❌ Failed to load orders: \(error.localizedDescription)")
+                    print("❌ FanProfileViewModel.loadOrders: Failed to load orders: \(error.localizedDescription)")
                 }
                 self?.isLoading = false
             }
