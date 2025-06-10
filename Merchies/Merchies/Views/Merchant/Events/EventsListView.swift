@@ -65,7 +65,7 @@ struct EventsListView: View {
                         
                         List {
                             ForEach(eventViewModel.events) { event in
-                                NavigationLink(destination: EventProductsView(event: event)) {
+                                NavigationLink(destination: EditEventView(vm: SingleEventViewModel(event: event))) {
                                     EnhancedEventListRow(event: event)
                                 }
                             }
