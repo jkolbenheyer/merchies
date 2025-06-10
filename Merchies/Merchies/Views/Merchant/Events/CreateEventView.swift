@@ -554,59 +554,97 @@ struct EventPreviewCard: View {
     let geofenceRadius: Double
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 0) {
             // Event image if available
             if let eventImage = eventImage {
                 Image(uiImage: eventImage)
                     .resizable()
                     .scaledToFill()
-                    .frame(height: 120)
-                    .cornerRadius(8)
+                    .frame(height: 140)
                     .clipped()
             }
             
-            VStack(alignment: .leading, spacing: 8) {
-                Text(eventName)
-                    .font(.headline)
-                    .fontWeight(.bold)
-                
-                Text(venueName)
-                    .font(.subheadline)
-                    .foregroundColor(.purple)
-                
-                if !address.isEmpty {
-                    Label(address, systemImage: "location")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                
-                HStack {
-                    Label(formatDateRange(start: startDate, end: endDate), systemImage: "calendar")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                
-                // Geofencing info
-                HStack {
-                    Label("\(Int(geofenceRadius))m detection radius", systemImage: "location.circle")
-                        .font(.caption)
-                        .foregroundColor(.purple)
+            // Content section with consistent padding
+            VStack(alignment: .leading, spacing: 16) {
+                // Event title and venue
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(eventName)
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                        .lineLimit(2)
+                    
+                    Text(venueName)
+                        .font(.subheadline)
                         .fontWeight(.medium)
+                        .foregroundColor(.purple)
+                        .lineLimit(1)
+                }
+                
+                // Location and timing info
+                VStack(alignment: .leading, spacing: 12) {
+                    if !address.isEmpty {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "location")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .frame(width: 12, alignment: .leading)
+                            
+                            Text(address)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
                     
-                    Spacer()
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "calendar")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .frame(width: 12, alignment: .leading)
+                        
+                        Text(formatDateRange(start: startDate, end: endDate))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                
+                // Geofencing info section
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .center, spacing: 8) {
+                        Image(systemName: "location.circle")
+                            .font(.caption)
+                            .foregroundColor(.purple)
+                            .frame(width: 12, alignment: .leading)
+                        
+                        Text("\(Int(geofenceRadius))m detection radius")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.purple)
+                    }
                     
-                    Text("Fans within range can shop")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                        .italic()
+                    HStack {
+                        Spacer()
+                        Text("Fans within range can shop")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .italic()
+                    }
                 }
                 .padding(.top, 4)
             }
-            .padding(.horizontal, eventImage != nil ? 0 : 16)
+            .padding(.all, 16)
         }
-        .padding(eventImage != nil ? 0 : 16)
-        .background(Color.purple.opacity(0.1))
+        .background(Color.purple.opacity(0.05))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.purple.opacity(0.2), lineWidth: 1)
+        )
         .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
     
     private func formatDateRange(start: Date, end: Date) -> String {

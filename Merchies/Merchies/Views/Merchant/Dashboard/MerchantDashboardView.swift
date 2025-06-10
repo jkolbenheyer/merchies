@@ -178,6 +178,10 @@ struct MerchantDashboardView: View {
                     NavigationLink(destination: EditEventView(vm: SingleEventViewModel(event: event))) {
                         EnhancedEventRow(event: event)
                     }
+                    .onTapGesture {
+                        print("🔍 MerchantDashboard - Navigating to event: \(event.name)")
+                        print("🔍 MerchantDashboard - Event ID: \(event.id ?? "nil")")
+                    }
                     .buttonStyle(PlainButtonStyle())
                 }
             }

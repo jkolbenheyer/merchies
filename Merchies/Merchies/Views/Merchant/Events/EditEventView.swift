@@ -1342,8 +1342,15 @@ struct EditEventAddProductsView: View {
                 }
             }
             .onAppear {
+                print("🔍 EditEventView - Add Products onAppear triggered")
+                print("🔍 EditEventView - User ID: \(authViewModel.user?.uid ?? "nil")")
+                print("🔍 EditEventView - Event ID: \(event.id ?? "nil")")
+                
                 if let uid = authViewModel.user?.uid, let eid = event.id {
+                    print("🔍 EditEventView - Calling fetchMerchantProducts for merchant: \(uid), event: \(eid)")
                     viewModel.fetchMerchantProducts(merchantId: uid, excludingEventId: eid)
+                } else {
+                    print("❌ EditEventView - Missing required data - userId: \(authViewModel.user?.uid ?? "nil"), eventId: \(event.id ?? "nil")")
                 }
             }
         }

@@ -15,17 +15,12 @@ struct ImageCropperView: View {
     @State private var cropSize: CGSize = CGSize(width: 300, height: 200)
     
     private var adaptiveCropSize: CGSize {
-        let imageAspectRatio = originalImage.size.width / originalImage.size.height
-        let maxWidth: CGFloat = 300
-        let maxHeight: CGFloat = 300
+        // For product images, use a more consistent aspect ratio
+        // Options: Square (1:1), Standard Product (4:3), or Portrait Product (3:4)
+        let cropWidth: CGFloat = 280
+        let cropHeight: CGFloat = 280 // Square crop for product consistency
         
-        if imageAspectRatio > 1 {
-            // Landscape image
-            return CGSize(width: maxWidth, height: maxWidth / imageAspectRatio)
-        } else {
-            // Portrait or square image
-            return CGSize(width: maxHeight * imageAspectRatio, height: maxHeight)
-        }
+        return CGSize(width: cropWidth, height: cropHeight)
     }
     
     var body: some View {

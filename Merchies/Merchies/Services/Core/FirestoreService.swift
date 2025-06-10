@@ -225,6 +225,8 @@ class FirestoreService {
     
     // NEW: Fetch available products for a merchant (excluding those already in event)
     func fetchAvailableProductsForMerchant(merchantId: String, excludingEventId: String?, completion: @escaping ([Product]?, Error?) -> Void) {
+        print("🔍 Fetching products for merchant: \(merchantId), excluding event: \(excludingEventId ?? "none")")
+        
         db.collection("products")
             .whereField("band_id", isEqualTo: merchantId)
             .whereField("active", isEqualTo: true)
@@ -235,15 +237,32 @@ class FirestoreService {
                     return
                 }
                 
+                print("📦 Found \(snapshot?.documents.count ?? 0) total products for merchant")
+                
                 var products = snapshot?.documents.compactMap { document -> Product? in
-                    try? document.data(as: Product.self)
+                    do {
+                        let product = try document.data(as: Product.self)
+                        print("📦 Product: \(product.title), eventIds: \(product.eventIds)")
+                        return product
+                    } catch {
+                        print("❌ Failed to decode product: \(error.localizedDescription)")
+                        return nil
+                    }
                 } ?? []
+                
+                print("📦 Successfully decoded \(products.count) products")
                 
                 // Filter out products already in the event if excludingEventId is provided
                 if let eventId = excludingEventId {
+                    let originalCount = products.count
                     products = products.filter { product in
-                        !product.eventIds.contains(eventId)
+                        let isNotInEvent = !product.eventIds.contains(eventId)
+                        if !isNotInEvent {
+                            print("📦 Filtering out product '\(product.title)' - already in event \(eventId)")
+                        }
+                        return isNotInEvent
                     }
+                    print("📦 After filtering: \(products.count) products available (filtered out \(originalCount - products.count))")
                 }
                 
                 print("✅ Fetched \(products.count) available products for merchant")

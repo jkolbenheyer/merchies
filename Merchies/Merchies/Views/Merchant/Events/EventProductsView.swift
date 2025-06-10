@@ -383,8 +383,15 @@ struct OriginalAddProductsToEventView: View {
                 }
             }
             .onAppear {
+                print("🔍 AddProductsToEventView onAppear - checking user and event")
+                print("🔍 User ID: \(authViewModel.user?.uid ?? "nil")")
+                print("🔍 Event ID: \(event.id ?? "nil")")
+                
                 if let userId = authViewModel.user?.uid, let eventId = event.id {
+                    print("🔍 Calling fetchMerchantProducts for merchant: \(userId), event: \(eventId)")
                     viewModel.fetchMerchantProducts(merchantId: userId, excludingEventId: eventId)
+                } else {
+                    print("❌ Missing required data - userId: \(authViewModel.user?.uid ?? "nil"), eventId: \(event.id ?? "nil")")
                 }
             }
             .overlay(

@@ -55,7 +55,11 @@ class EventViewModel: ObservableObject {
                     
                     let events = snapshot?.documents.compactMap { document -> Event? in
                         do {
-                            return try document.data(as: Event.self)
+                            var event = try document.data(as: Event.self)
+                            // Ensure the document ID is set
+                            event.id = document.documentID
+                            print("📅 Fetched event: \(event.name) with ID: \(event.id ?? "nil")")
+                            return event
                         } catch {
                             print("Error parsing event: \(error)")
                             return nil
