@@ -83,6 +83,37 @@ class EventProductsViewModel: ObservableObject {
         }
     }
     
+    // Add multiple products to event in a single batch operation
+    func addProductsToEvent(productIds: [String], eventId: String, completion: @escaping (Bool) -> Void) {
+        guard !productIds.isEmpty else {
+            completion(false)
+            return
+        }
+        
+        isLoading = true
+        error = nil
+        
+        print("🔍 Adding \(productIds.count) products to event \(eventId)")
+        
+        firestoreService.linkMultipleProductsToEvent(productIds: productIds, eventId: eventId) { [weak self] success, error in
+            DispatchQueue.main.async {
+                self?.isLoading = false
+                
+                if let error = error {
+                    self?.error = error.localizedDescription
+                    print("❌ Failed to add products to event: \(error.localizedDescription)")
+                    completion(false)
+                } else if success {
+                    print("✅ Successfully added \(productIds.count) products to event")
+                    completion(true)
+                } else {
+                    print("❌ Failed to add products to event - unknown error")
+                    completion(false)
+                }
+            }
+        }
+    }
+    
     // Remove product from event
     func removeProductFromEvent(productId: String, eventId: String, completion: @escaping (Bool) -> Void) {
         isLoading = true

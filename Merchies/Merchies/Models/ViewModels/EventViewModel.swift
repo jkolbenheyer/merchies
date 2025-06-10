@@ -3,12 +3,24 @@ import CoreLocation
 import FirebaseFirestore
 import SwiftUI
 
+enum EventSortOption: String, CaseIterable {
+    case eventDateDesc = "Event Date (Newest First)"
+    case eventDateAsc = "Event Date (Oldest First)"
+    case endDateDesc = "End Date (Latest First)"
+    case endDateAsc = "End Date (Earliest First)"
+    case nameAsc = "Name (A-Z)"
+    case nameDesc = "Name (Z-A)"
+    case statusDesc = "Status (Active First)"
+}
+
 class EventViewModel: ObservableObject {
     @Published var events: [Event] = []
     @Published var isLoading: Bool = false
     @Published var error: String?
+    @Published var sortOption: EventSortOption = .eventDateDesc
     
     private let firestoreService = FirestoreService()
+    private var originalEvents: [Event] = []
     
     func fetchNearbyEvents(latitude: Double, longitude: Double) {
         isLoading = true
@@ -41,9 +53,9 @@ class EventViewModel: ObservableObject {
         
         let db = Firestore.firestore()
         
+        // Remove ordering from Firestore query since we'll sort locally
         db.collection("events")
             .whereField("merchant_ids", arrayContains: merchantId)
-            .order(by: "start_date", descending: false)
             .getDocuments { [weak self] snapshot, error in
                 DispatchQueue.main.async {
                     self?.isLoading = false
@@ -53,7 +65,7 @@ class EventViewModel: ObservableObject {
                         return
                     }
                     
-                    let events = snapshot?.documents.compactMap { document -> Event? in
+                    let fetchedEvents = snapshot?.documents.compactMap { document -> Event? in
                         do {
                             var event = try document.data(as: Event.self)
                             // Ensure the document ID is set
@@ -64,11 +76,65 @@ class EventViewModel: ObservableObject {
                             print("Error parsing event: \(error)")
                             return nil
                         }
-                    }
+                    } ?? []
                     
-                    self?.events = events ?? []
+                    self?.originalEvents = fetchedEvents
+                    self?.sortEvents()
                 }
             }
+    }
+    
+    // MARK: - Sorting Methods
+    
+    func setSortOption(_ option: EventSortOption) {
+        sortOption = option
+        sortEvents()
+    }
+    
+    private func sortEvents() {
+        events = sortedEvents(originalEvents, by: sortOption)
+    }
+    
+    private func sortedEvents(_ events: [Event], by option: EventSortOption) -> [Event] {
+        switch option {
+        case .eventDateDesc:
+            return events.sorted { (event1: Event, event2: Event) -> Bool in
+                return event1.startDate > event2.startDate
+            }
+        case .eventDateAsc:
+            return events.sorted { (event1: Event, event2: Event) -> Bool in
+                return event1.startDate < event2.startDate
+            }
+        case .endDateDesc:
+            return events.sorted { (event1: Event, event2: Event) -> Bool in
+                return event1.endDate > event2.endDate
+            }
+        case .endDateAsc:
+            return events.sorted { (event1: Event, event2: Event) -> Bool in
+                return event1.endDate < event2.endDate
+            }
+        case .nameAsc:
+            return events.sorted { (event1: Event, event2: Event) -> Bool in
+                return event1.name.localizedCaseInsensitiveCompare(event2.name) == .orderedAscending
+            }
+        case .nameDesc:
+            return events.sorted { (event1: Event, event2: Event) -> Bool in
+                return event1.name.localizedCaseInsensitiveCompare(event2.name) == .orderedDescending
+            }
+        case .statusDesc:
+            return events.sorted { (event1: Event, event2: Event) -> Bool in
+                // Active events first, then upcoming, then ended
+                let priority1 = event1.isActive ? 3 : (event1.isUpcoming ? 2 : 1)
+                let priority2 = event2.isActive ? 3 : (event2.isUpcoming ? 2 : 1)
+                
+                if priority1 != priority2 {
+                    return priority1 > priority2
+                } else {
+                    // If same status, sort by event date descending
+                    return event1.startDate > event2.startDate
+                }
+            }
+        }
     }
     
     // NEW: Create a new event

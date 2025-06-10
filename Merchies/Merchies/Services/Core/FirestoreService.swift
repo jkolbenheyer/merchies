@@ -325,6 +325,41 @@ class FirestoreService {
         }
     }
     
+    // Link multiple products to an event in a single batch operation
+    func linkMultipleProductsToEvent(productIds: [String], eventId: String, completion: @escaping (Bool, Error?) -> Void) {
+        guard !productIds.isEmpty else {
+            completion(false, NSError(domain: "FirestoreService", code: -1, userInfo: [NSLocalizedDescriptionKey: "No product IDs provided"]))
+            return
+        }
+        
+        let batch = db.batch()
+        
+        // Update event's product list with all product IDs
+        let eventRef = db.collection("events").document(eventId)
+        batch.updateData([
+            "product_ids": FieldValue.arrayUnion(productIds)
+        ], forDocument: eventRef)
+        
+        // Update each product's event list
+        for productId in productIds {
+            let productRef = db.collection("products").document(productId)
+            batch.updateData([
+                "event_ids": FieldValue.arrayUnion([eventId])
+            ], forDocument: productRef)
+        }
+        
+        // Commit the batch
+        batch.commit { error in
+            if let error = error {
+                print("❌ Failed to add \(productIds.count) products to event: \(error.localizedDescription)")
+                completion(false, error)
+            } else {
+                print("✅ Successfully added \(productIds.count) products to event")
+                completion(true, nil)
+            }
+        }
+    }
+    
     // NEW: Remove product from event - Different name to avoid conflict
     func unlinkProductFromEvent(productId: String, eventId: String, completion: @escaping (Bool, Error?) -> Void) {
         // Use a batch write to update both documents atomically

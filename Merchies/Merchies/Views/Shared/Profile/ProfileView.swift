@@ -263,13 +263,16 @@ struct StatCard: View {
                 .fontWeight(.bold)
                 .foregroundColor(.primary)
                 .opacity(isLoading ? 0.6 : 1.0)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+                .frame(maxWidth: .infinity)
             
             Text(title)
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, minHeight: 100)
         .padding()
         .background(Color(.systemGray6))
         .cornerRadius(12)

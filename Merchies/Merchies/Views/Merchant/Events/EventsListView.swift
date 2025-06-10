@@ -21,14 +21,57 @@ struct EventsListView: View {
                         showingCreateEvent = true
                     }
                 } else {
-                    List {
-                        ForEach(eventViewModel.events) { event in
-                            NavigationLink(destination: EventProductsView(event: event)) {
-                                EnhancedEventListRow(event: event)
+                    VStack(spacing: 0) {
+                        // Sort controls
+                        HStack {
+                            Text("\(eventViewModel.events.count) events")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                            
+                            Spacer()
+                            
+                            Menu {
+                                ForEach(EventSortOption.allCases, id: \.self) { option in
+                                    Button(action: {
+                                        eventViewModel.setSortOption(option)
+                                    }) {
+                                        HStack {
+                                            Text(option.rawValue)
+                                            if eventViewModel.sortOption == option {
+                                                Spacer()
+                                                Image(systemName: "checkmark")
+                                                    .foregroundColor(.cyan)
+                                            }
+                                        }
+                                    }
+                                }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "arrow.up.arrow.down")
+                                        .font(.caption)
+                                    Text("Sort")
+                                        .font(.caption)
+                                }
+                                .foregroundColor(.cyan)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.cyan.opacity(0.1))
+                                .cornerRadius(6)
                             }
                         }
+                        .padding(.horizontal)
+                        .padding(.vertical, 8)
+                        .background(Color(.systemBackground))
+                        
+                        List {
+                            ForEach(eventViewModel.events) { event in
+                                NavigationLink(destination: EventProductsView(event: event)) {
+                                    EnhancedEventListRow(event: event)
+                                }
+                            }
+                        }
+                        .listStyle(PlainListStyle())
                     }
-                    .listStyle(PlainListStyle())
                 }
             }
             .navigationTitle("My Events")

@@ -95,27 +95,7 @@ struct MerchantProfileView: View {
     private var profileHeader: some View {
         VStack(spacing: 16) {
             // Profile Image
-            ZStack {
-                Circle()
-                    .fill(Color.purple.gradient)
-                    .frame(width: 100, height: 100)
-                
-                if let photoURL = authViewModel.user?.photoURL {
-                    AsyncImage(url: photoURL) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        ProgressView()
-                    }
-                    .frame(width: 100, height: 100)
-                    .clipShape(Circle())
-                } else {
-                    Image(systemName: "person.fill")
-                        .font(.system(size: 40))
-                        .foregroundColor(.white)
-                }
-            }
+            ProfilePictureView(user: authViewModel.user, size: 100)
             
             // Merchant Info
             VStack(spacing: 4) {
@@ -307,6 +287,14 @@ struct MerchantProfileView: View {
     
     // MARK: - Helper Methods
     private func loadProfileData() async {
+        // Refresh user data to get latest profile info
+        do {
+            try await authViewModel.user?.reload()
+            print("✅ User data refreshed in merchant profile")
+        } catch {
+            print("❌ Error refreshing user data: \(error.localizedDescription)")
+        }
+        
         guard let userId = authViewModel.user?.uid else { return }
         await profileViewModel.loadMerchantData(userId: userId)
         await profileViewModel.loadAnalytics(for: selectedTimeRange)

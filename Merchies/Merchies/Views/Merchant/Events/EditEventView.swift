@@ -4,6 +4,7 @@ import MapKit
 import CoreLocation
 import PhotosUI
 import FirebaseStorage
+import FirebaseFirestore
 import Foundation
 
 struct EditEventView: View {
@@ -63,7 +64,6 @@ struct EditEventView: View {
                         }
                         .tag(1)
                 }
-                .toolbar(.hidden, for: .tabBar)
                 
                 // Loading overlay
                 DSLoadingOverlay(
@@ -1292,12 +1292,39 @@ struct EditEventAddProductsView: View {
     var body: some View {
         NavigationView {
             VStack {
-                if viewModel.availableProducts.isEmpty && !viewModel.isLoading {
-                    DSEmptyState(
-                        icon: "tray",
-                        title: "No Available Products",
-                        subtitle: "All your products are already added to this event or you haven't created any products yet."
-                    )
+                if viewModel.isLoading {
+                    VStack {
+                        ProgressView("Loading products...")
+                            .padding()
+                    }
+                } else if viewModel.availableProducts.isEmpty {
+                    VStack(spacing: 16) {
+                        DSEmptyState(
+                            icon: "tray",
+                            title: "No Available Products",
+                            subtitle: "All your products are already added to this event or you haven't created any products yet."
+                        )
+                        
+                        HStack(spacing: 12) {
+                            Button("Refresh") {
+                                if let uid = authViewModel.user?.uid, let eid = event.id {
+                                    viewModel.fetchMerchantProducts(merchantId: uid, excludingEventId: eid)
+                                }
+                            }
+                            .padding()
+                            .background(Color.green)
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
+                            
+                            Button("Debug") {
+                                debugCheckProducts()
+                            }
+                            .padding()
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
+                        }
+                    }
                 } else {
                     List {
                         Section("Available Products") {
@@ -1354,7 +1381,11 @@ struct EditEventAddProductsView: View {
             .onAppear {
                 print("🔍 EditEventView - Add Products onAppear triggered")
                 print("🔍 EditEventView - User ID: \(authViewModel.user?.uid ?? "nil")")
+                print("🔍 EditEventView - User email: \(authViewModel.user?.email ?? "nil")")
                 print("🔍 EditEventView - Event ID: \(event.id ?? "nil")")
+                print("🔍 EditEventView - Event name: \(event.name)")
+                print("🔍 EditEventView - Current available products count: \(viewModel.availableProducts.count)")
+                print("🔍 EditEventView - Current event products count: \(viewModel.products.count)")
                 
                 if let uid = authViewModel.user?.uid, let eid = event.id {
                     print("🔍 EditEventView - Calling fetchMerchantProducts for merchant: \(uid), event: \(eid)")
@@ -1366,24 +1397,85 @@ struct EditEventAddProductsView: View {
         }
     }
     
+    private func debugCheckProducts() {
+        guard let uid = authViewModel.user?.uid else {
+            print("❌ No user ID available")
+            return
+        }
+        
+        print("🔍 DEBUG: Starting product check for user \(uid)")
+        
+        let db = Firestore.firestore()
+        
+        // First, check all products for this user (without any filters)
+        db.collection("products")
+            .whereField("band_id", isEqualTo: uid)
+            .getDocuments { snapshot, error in
+                if let error = error {
+                    print("❌ DEBUG: Error fetching products: \(error.localizedDescription)")
+                    return
+                }
+                
+                print("🔍 DEBUG: Found \(snapshot?.documents.count ?? 0) total products for user \(uid)")
+                
+                snapshot?.documents.forEach { doc in
+                    let data = doc.data()
+                    print("🔍 DEBUG: Product \(doc.documentID):")
+                    print("   - title: \(data["title"] as? String ?? "nil")")
+                    print("   - band_id: \(data["band_id"] as? String ?? "nil")")
+                    print("   - active: \(data["active"] as? Bool ?? false)")
+                    print("   - event_ids: \(data["event_ids"] as? [String] ?? [])")
+                }
+                
+                // Now check active products
+                db.collection("products")
+                    .whereField("band_id", isEqualTo: uid)
+                    .whereField("active", isEqualTo: true)
+                    .getDocuments { snapshot2, error2 in
+                        if let error2 = error2 {
+                            print("❌ DEBUG: Error fetching active products: \(error2.localizedDescription)")
+                            return
+                        }
+                        
+                        print("🔍 DEBUG: Found \(snapshot2?.documents.count ?? 0) active products for user \(uid)")
+                        
+                        // Check if this event exists
+                        if let eventId = self.event.id {
+                            print("🔍 DEBUG: Checking event \(eventId)")
+                            db.collection("events").document(eventId).getDocument { eventDoc, eventError in
+                                if let eventError = eventError {
+                                    print("❌ DEBUG: Error fetching event: \(eventError.localizedDescription)")
+                                    return
+                                }
+                                
+                                if let eventData = eventDoc?.data() {
+                                    print("🔍 DEBUG: Event data: \(eventData)")
+                                } else {
+                                    print("❌ DEBUG: Event not found")
+                                }
+                            }
+                        }
+                    }
+            }
+    }
+    
     private func addSelectedProducts() {
         guard let eid = event.id else { return }
         isLoading = true
-        let group = DispatchGroup()
-        var failed = false
-
-        for pid in selectedProducts {
-            group.enter()
-            viewModel.addProductToEvent(productId: pid, eventId: eid) { success in
-                if !success { failed = true }
-                group.leave()
-            }
-        }
-
-        group.notify(queue: .main) {
-            isLoading = false
-            if !failed {
-                presentationMode.wrappedValue.dismiss()
+        
+        let productIds = Array(selectedProducts)
+        print("🔍 EditEventView - Adding \(productIds.count) products to event")
+        
+        viewModel.addProductsToEvent(productIds: productIds, eventId: eid) { success in
+            DispatchQueue.main.async {
+                self.isLoading = false
+                if success {
+                    print("✅ EditEventView - Successfully added all products")
+                    self.presentationMode.wrappedValue.dismiss()
+                } else {
+                    print("❌ EditEventView - Failed to add products")
+                    // Show error state - optionally keep dialog open to retry
+                }
             }
         }
     }
@@ -1393,8 +1485,18 @@ struct EditEventAddProductsView: View {
 struct EditEventProductRow: View {
     let product: Product
     let onRemove: () -> Void
+    let onInventoryUpdate: ((Product, [String: Int]) -> Void)?
     @State private var loadedProductImage: UIImage?
     @State private var isLoadingProductImage = false
+    @State private var showingInventoryEdit = false
+    @State private var editedInventory: [String: Int] = [:]
+    
+    init(product: Product, onRemove: @escaping () -> Void, onInventoryUpdate: ((Product, [String: Int]) -> Void)? = nil) {
+        self.product = product
+        self.onRemove = onRemove
+        self.onInventoryUpdate = onInventoryUpdate
+        self._editedInventory = State(initialValue: product.inventory)
+    }
 
     var body: some View {
         DSCard(padding: DesignSystem.Spacing.lg) {
@@ -1446,9 +1548,20 @@ struct EditEventProductRow: View {
                         Text("•")
                             .foregroundColor(DesignSystem.Colors.secondaryText)
                         
-                        Text("\(product.inventory.values.reduce(0, +)) in stock")
-                            .font(DesignSystem.Typography.footnote)
-                            .foregroundColor(product.inventory.values.reduce(0, +) > 0 ? DesignSystem.Colors.success : DesignSystem.Colors.danger)
+                        Button(action: {
+                            showingInventoryEdit = true
+                        }) {
+                            HStack(spacing: 4) {
+                                Text("\(product.inventory.values.reduce(0, +)) in stock")
+                                    .font(DesignSystem.Typography.footnote)
+                                    .foregroundColor(product.inventory.values.reduce(0, +) > 0 ? DesignSystem.Colors.success : DesignSystem.Colors.danger)
+                                
+                                Image(systemName: "pencil.circle.fill")
+                                    .font(.caption)
+                                    .foregroundColor(DesignSystem.Colors.primary)
+                            }
+                        }
+                        .buttonStyle(PlainButtonStyle())
                     }
                     
                     Text(product.sizes.joined(separator: ", "))
@@ -1479,6 +1592,15 @@ struct EditEventProductRow: View {
         }
         .onChange(of: product.imageUrl) { _ in
             loadProductImage()
+        }
+        .sheet(isPresented: $showingInventoryEdit) {
+            SimpleInventoryEditView(
+                product: product,
+                inventory: $editedInventory,
+                onSave: { newInventory in
+                    onInventoryUpdate?(product, newInventory)
+                }
+            )
         }
     }
     

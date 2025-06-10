@@ -168,8 +168,43 @@ struct MerchantDashboardView: View {
                     .font(.headline)
                     .fontWeight(.semibold)
                 Spacer()
+                Menu {
+                    ForEach(EventSortOption.allCases, id: \.self) { option in
+                        Button(action: {
+                            eventViewModel.setSortOption(option)
+                        }) {
+                            HStack {
+                                Text(option.rawValue)
+                                if eventViewModel.sortOption == option {
+                                    Spacer()
+                                    Image(systemName: "checkmark")
+                                        .foregroundColor(.cyan)
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.up.arrow.down")
+                            .font(.caption)
+                        Text("Sort")
+                            .font(.caption)
+                    }
+                    .foregroundColor(.cyan)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.cyan.opacity(0.1))
+                    .cornerRadius(6)
+                }
+            }
+            
+            HStack {
                 Text("\(eventViewModel.events.count) item\(eventViewModel.events.count == 1 ? "" : "s")")
                     .font(.subheadline)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Text("Sorted by: \(eventViewModel.sortOption.rawValue)")
+                    .font(.caption)
                     .foregroundColor(.secondary)
             }
             LazyVStack(spacing: 12) {

@@ -26,26 +26,12 @@ struct EditMerchantProfileView: View {
                                 Image(uiImage: profileImage)
                                     .resizable()
                                     .aspectRatio(contentMode: .fill)
-                            } else if let photoURL = authViewModel.user?.photoURL {
-                                AsyncImage(url: photoURL) { image in
-                                    image
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                } placeholder: {
-                                    ProgressView()
-                                }
+                                    .frame(width: 80, height: 80)
+                                    .clipShape(Circle())
                             } else {
-                                Rectangle()
-                                    .fill(Color.purple.gradient)
-                                    .overlay(
-                                        Image(systemName: "person.fill")
-                                            .font(.system(size: 30))
-                                            .foregroundColor(.white)
-                                    )
+                                ProfilePictureView(user: authViewModel.user, size: 80)
                             }
                         }
-                        .frame(width: 80, height: 80)
-                        .clipShape(Circle())
                         
                         Spacer()
                         
@@ -179,8 +165,21 @@ struct EditMerchantProfileView: View {
     // MARK: - Methods
     
     private func loadCurrentProfile() {
-        displayName = authViewModel.user?.displayName ?? ""
-        phoneNumber = authViewModel.user?.phoneNumber ?? ""
+        // First refresh user data to get latest profile info
+        authViewModel.user?.reload { error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    print("❌ Error refreshing user data in edit profile: \(error.localizedDescription)")
+                } else {
+                    print("✅ User data refreshed in edit profile")
+                    print("🔍 PhotoURL: \(self.authViewModel.user?.photoURL?.absoluteString ?? "none")")
+                }
+                
+                // Load current profile data
+                self.displayName = self.authViewModel.user?.displayName ?? ""
+                self.phoneNumber = self.authViewModel.user?.phoneNumber ?? ""
+            }
+        }
     }
     
     private func saveProfile() async {
@@ -188,10 +187,20 @@ struct EditMerchantProfileView: View {
         
         do {
             var updates: [String: Any] = [:]
+            var photoURL: String? = nil
+            
+            // Upload new profile image if selected
+            if let profileImage = profileImage {
+                print("🔍 Uploading new profile image...")
+                photoURL = try await uploadProfileImage(profileImage)
+                updates["photo_url"] = photoURL
+                print("✅ Profile image uploaded: \(photoURL ?? "nil")")
+            }
             
             // Update display name if changed
             if displayName != (authViewModel.user?.displayName ?? "") {
                 updates["display_name"] = displayName
+                print("🔍 Updating display name: \(displayName)")
             }
             
             // Update phone number if changed
@@ -199,40 +208,55 @@ struct EditMerchantProfileView: View {
                 updates["phone_number"] = phoneNumber
             }
             
-            // Upload new profile image if selected
-            if let profileImage = profileImage {
-                let photoURL = try await uploadProfileImage(profileImage)
-                updates["photo_url"] = photoURL
-            }
-            
             // Update last active timestamp
             updates["last_active_at"] = FieldValue.serverTimestamp()
             
-            // Save to Firestore
+            // Save to Firestore first
             if !updates.isEmpty {
+                print("🔍 Saving to Firestore...")
                 try await Firestore.firestore()
                     .collection("users")
                     .document(authViewModel.user?.uid ?? "")
                     .updateData(updates)
+                print("✅ Firestore updated successfully")
             }
             
             // Update Firebase Auth profile
+            print("🔍 Updating Firebase Auth profile...")
             let changeRequest = authViewModel.user?.createProfileChangeRequest()
-            changeRequest?.displayName = displayName
-            if let profileImage = profileImage {
-                let photoURL = try await uploadProfileImage(profileImage)
+            
+            if !displayName.isEmpty {
+                changeRequest?.displayName = displayName
+            }
+            
+            if let photoURL = photoURL {
                 changeRequest?.photoURL = URL(string: photoURL)
             }
-            try await changeRequest?.commitChanges()
             
-            alertMessage = "Profile updated successfully!"
+            try await changeRequest?.commitChanges()
+            print("✅ Firebase Auth profile updated")
+            
+            // Force reload the user to get updated profile
+            try await authViewModel.user?.reload()
+            print("✅ User profile reloaded")
+            
+            await MainActor.run {
+                // Clear the selected image since it's now saved
+                self.profileImage = nil
+                alertMessage = "Profile updated successfully!"
+            }
             
         } catch {
-            alertMessage = "Failed to update profile: \(error.localizedDescription)"
+            print("❌ Failed to update profile: \(error)")
+            await MainActor.run {
+                alertMessage = "Failed to update profile: \(error.localizedDescription)"
+            }
         }
         
-        isUploading = false
-        showAlert = true
+        await MainActor.run {
+            isUploading = false
+            showAlert = true
+        }
     }
     
     private func uploadProfileImage(_ image: UIImage) async throws -> String {

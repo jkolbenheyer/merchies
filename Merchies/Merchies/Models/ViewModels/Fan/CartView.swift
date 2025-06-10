@@ -279,7 +279,7 @@ struct EnhancedCartItemRow: View {
                 
                 // Quantity and pricing
                 HStack {
-                    // Quantity Badge
+                    // Quantity Label
                     HStack(spacing: 4) {
                         Text("Qty:")
                             .font(.caption)
@@ -287,11 +287,7 @@ struct EnhancedCartItemRow: View {
                         Text("\(item.quantity)")
                             .font(.subheadline)
                             .fontWeight(.semibold)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 2)
-                            .background(Color.purple)
-                            .cornerRadius(12)
+                            .foregroundColor(.primary)
                     }
                     
                     Spacer()
