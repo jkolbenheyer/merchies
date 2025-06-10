@@ -5,6 +5,7 @@ struct EventsAttendedView: View {
     let eventsAttended: [Event]
     @State private var searchText = ""
     @State private var selectedTimeFilter: TimeFilter = .all
+    @Environment(\.presentationMode) var presentationMode
     
     enum TimeFilter: String, CaseIterable {
         case all = "All Time"
@@ -14,34 +15,53 @@ struct EventsAttendedView: View {
     }
     
     var filteredEvents: [Event] {
+        print("🔍 EventsAttendedView.filteredEvents: Starting with \(eventsAttended.count) events")
+        for (index, event) in eventsAttended.enumerated() {
+            print("   Event \(index + 1): \(event.name) - Start: \(event.startDate) - Status: \(event.isActive ? "Active" : event.isUpcoming ? "Upcoming" : "Past")")
+        }
+        
         var filtered = eventsAttended
         
         // Apply time filter
         let now = Date()
         let calendar = Calendar.current
         
+        print("🔍 EventsAttendedView.filteredEvents: Applying time filter: \(selectedTimeFilter.rawValue)")
+        
         switch selectedTimeFilter {
         case .all:
+            print("🔍 EventsAttendedView.filteredEvents: 'All Time' selected - no time filtering")
             break
         case .thisYear:
+            let beforeCount = filtered.count
             filtered = filtered.filter { calendar.isDate($0.startDate, equalTo: now, toGranularity: .year) }
+            print("🔍 EventsAttendedView.filteredEvents: 'This Year' filter - \(beforeCount) -> \(filtered.count) events")
         case .thisMonth:
+            let beforeCount = filtered.count
             filtered = filtered.filter { calendar.isDate($0.startDate, equalTo: now, toGranularity: .month) }
+            print("🔍 EventsAttendedView.filteredEvents: 'This Month' filter - \(beforeCount) -> \(filtered.count) events")
         case .recent:
+            let beforeCount = filtered.count
             let threeMonthsAgo = calendar.date(byAdding: .month, value: -3, to: now) ?? now
             filtered = filtered.filter { $0.startDate >= threeMonthsAgo }
+            print("🔍 EventsAttendedView.filteredEvents: 'Recent' filter - \(beforeCount) -> \(filtered.count) events")
         }
         
         // Apply search filter
         if !searchText.isEmpty {
+            let beforeCount = filtered.count
             filtered = filtered.filter {
                 $0.name.localizedCaseInsensitiveContains(searchText) ||
                 $0.venueName.localizedCaseInsensitiveContains(searchText) ||
                 $0.address.localizedCaseInsensitiveContains(searchText)
             }
+            print("🔍 EventsAttendedView.filteredEvents: Search filter '\(searchText)' - \(beforeCount) -> \(filtered.count) events")
         }
         
-        return filtered.sorted { $0.startDate > $1.startDate }
+        let finalEvents = filtered.sorted { $0.startDate > $1.startDate }
+        print("🔍 EventsAttendedView.filteredEvents: Final result: \(finalEvents.count) events after sorting")
+        
+        return finalEvents
     }
     
     var body: some View {
@@ -85,12 +105,18 @@ struct EventsAttendedView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 12) {
-                        ForEach(filteredEvents) { event in
+                        ForEach(filteredEvents.indices, id: \.self) { index in
+                            let event = filteredEvents[index]
                             EventAttendanceCard(event: event)
+                                .onAppear {
+                                    print("🔍 EventsAttendedView: Rendering event \(index + 1): \(event.name)")
+                                }
                         }
                     }
                     .padding(.horizontal)
+                    .padding(.bottom, 20) // Add bottom padding to ensure content is visible
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .navigationTitle("Events Attended")
@@ -136,18 +162,30 @@ struct EventsAttendedView: View {
     
     private var emptyStateView: some View {
         VStack(spacing: 20) {
-            Image(systemName: "calendar.badge.exclamationmark")
+            Image(systemName: eventsAttended.isEmpty ? "calendar.badge.plus" : "calendar.badge.exclamationmark")
                 .font(.system(size: 60))
                 .foregroundColor(.gray)
             
-            Text("No Events Found")
+            Text(eventsAttended.isEmpty ? "No Events Attended" : "No Events Found")
                 .font(.title3)
                 .fontWeight(.semibold)
             
-            Text("Try adjusting your search or filter criteria")
+            Text(eventsAttended.isEmpty ? 
+                 "When you attend events and make purchases, they'll appear here." : 
+                 "Try adjusting your search or filter criteria")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
+            
+            if eventsAttended.isEmpty {
+                Button("Go Back") {
+                    presentationMode.wrappedValue.dismiss()
+                }
+                .foregroundColor(.white)
+                .padding()
+                .background(Color.purple)
+                .cornerRadius(8)
+            }
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -218,7 +256,7 @@ struct EventAttendanceCard: View {
                     
                     Spacer()
                     
-                    EventStatusBadge(event: event)
+                    EventStatusBadge(event: event, forceAttended: true)
                 }
                 .font(.caption)
                 .foregroundColor(.secondary)
@@ -229,6 +267,7 @@ struct EventAttendanceCard: View {
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
         .onAppear {
+            print("🔍 EventAttendanceCard: onAppear for event '\(event.name)'")
             loadEventImage()
         }
     }
@@ -270,6 +309,12 @@ struct EventAttendanceCard: View {
 
 struct EventStatusBadge: View {
     let event: Event
+    let forceAttended: Bool
+    
+    init(event: Event, forceAttended: Bool = false) {
+        self.event = event
+        self.forceAttended = forceAttended
+    }
     
     var body: some View {
         let (text, color) = statusInfo
@@ -285,7 +330,9 @@ struct EventStatusBadge: View {
     }
     
     private var statusInfo: (String, Color) {
-        if event.isPast {
+        if forceAttended {
+            return ("Attended", .green)
+        } else if event.isPast {
             return ("Attended", .green)
         } else if event.isActive {
             return ("Live", .orange)

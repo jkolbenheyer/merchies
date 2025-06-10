@@ -180,27 +180,45 @@ class FirestoreService {
     
     // NEW: Fetch products for a specific event (using event's product_ids as source of truth)
     func fetchProductsForEvent(eventId: String, completion: @escaping ([Product]?, Error?) -> Void) {
+        print("🏪 FirestoreService: Starting to fetch products for event ID: \(eventId)")
+        
         // First, get the event to see its product_ids
         db.collection("events").document(eventId).getDocument { eventSnapshot, eventError in
             if let eventError = eventError {
-                print("❌ Failed to fetch event for product count: \(eventError.localizedDescription)")
+                print("❌ FirestoreService: Failed to fetch event for product count: \(eventError.localizedDescription)")
                 completion(nil, eventError)
                 return
             }
             
-            guard let eventData = eventSnapshot?.data(),
-                  let productIds = eventData["product_ids"] as? [String] else {
-                print("✅ Event has no product_ids, returning empty array")
+            guard let eventSnapshot = eventSnapshot, eventSnapshot.exists else {
+                print("❌ FirestoreService: Event document does not exist for ID: \(eventId)")
+                let error = NSError(domain: "FirestoreService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Event not found"])
+                completion(nil, error)
+                return
+            }
+            
+            guard let eventData = eventSnapshot.data() else {
+                print("❌ FirestoreService: Event document has no data for ID: \(eventId)")
+                let error = NSError(domain: "FirestoreService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Event data is empty"])
+                completion(nil, error)
+                return
+            }
+            
+            // Check if product_ids field exists and has valid data
+            guard let productIds = eventData["product_ids"] as? [String] else {
+                print("⚠️ FirestoreService: Event has no product_ids field, returning empty array")
                 completion([], nil)
                 return
             }
             
             // If no products are linked to this event
             if productIds.isEmpty {
-                print("✅ Event has empty product_ids array")
+                print("⚠️ FirestoreService: Event has empty product_ids array")
                 completion([], nil)
                 return
             }
+            
+            print("🏪 FirestoreService: Event has \(productIds.count) product IDs: \(productIds)")
             
             // Now fetch products using the event's product_ids (source of truth)
             self.db.collection("products")
@@ -208,16 +226,24 @@ class FirestoreService {
                 .whereField("active", isEqualTo: true)
                 .getDocuments { snapshot, error in
                     if let error = error {
-                        print("❌ Failed to fetch products by IDs: \(error.localizedDescription)")
+                        print("❌ FirestoreService: Failed to fetch products by IDs: \(error.localizedDescription)")
                         completion(nil, error)
                         return
                     }
                     
                     let products = snapshot?.documents.compactMap { document -> Product? in
-                        try? document.data(as: Product.self)
+                        do {
+                            var product = try document.data(as: Product.self)
+                            product.id = document.documentID
+                            print("📦 FirestoreService: Fetched product: \(product.title) (ID: \(product.id ?? "nil"))")
+                            return product
+                        } catch {
+                            print("❌ FirestoreService: Failed to decode product from document \(document.documentID): \(error.localizedDescription)")
+                            return nil
+                        }
                     }
                     
-                    print("✅ Event '\(eventId)' has \(productIds.count) product_ids, fetched \(products?.count ?? 0) active products")
+                    print("✅ FirestoreService: Event '\(eventId)' has \(productIds.count) product_ids, successfully fetched \(products?.count ?? 0) active products")
                     completion(products, nil)
                 }
         }
@@ -492,12 +518,33 @@ class FirestoreService {
                     return
                 }
                 
-                let events = snapshot?.documents.compactMap { document -> Event? in
-                    try? document.data(as: Event.self)
+                var events = snapshot?.documents.compactMap { document -> Event? in
+                    do {
+                        var event = try document.data(as: Event.self)
+                        // Ensure the document ID is set
+                        event.id = document.documentID
+                        return event
+                    } catch {
+                        print("Error parsing event: \(error)")
+                        return nil
+                    }
+                } ?? []
+                
+                // Remove duplicates based on event ID
+                var uniqueEvents: [Event] = []
+                var seenIds: Set<String> = []
+                
+                for event in events {
+                    if let eventId = event.id, !seenIds.contains(eventId) {
+                        seenIds.insert(eventId)
+                        uniqueEvents.append(event)
+                    }
                 }
                 
+                print("✅ Fetched \(events.count) events, returning \(uniqueEvents.count) unique events")
+                
                 // In a real app, you'd filter events by distance here
-                completion(events, nil)
+                completion(uniqueEvents, nil)
             }
     }
     

@@ -18,9 +18,20 @@ class FanProfileViewModel: ObservableObject {
         print("🔍 FanProfileViewModel.loadProfileData: Starting load for userId: \(userId)")
         isLoading = true
         
-        // Load orders and calculate stats
+        // Clear existing data to ensure fresh load
+        orders = []
+        eventsAttended = []
+        totalSpent = 0.0
+        totalItemsPurchased = 0
+        favoriteArtists = []
+        
+        // Load orders first, then events attended (since events depend on orders)
         loadOrders(userId: userId)
-        loadEventsAttended(userId: userId)
+    }
+    
+    func refreshProfileData(userId: String) {
+        print("🔄 FanProfileViewModel.refreshProfileData: Refreshing profile data for userId: \(userId)")
+        loadProfileData(userId: userId)
     }
     
     private func loadOrders(userId: String) {
@@ -31,37 +42,78 @@ class FanProfileViewModel: ObservableObject {
                     print("✅ FanProfileViewModel.loadOrders: Received \(orders.count) orders")
                     print("🔍 Order details:")
                     for (index, order) in orders.enumerated() {
-                        print("   Order \(index + 1): ID=\(order.id ?? "nil"), Amount=$\(order.amount), Status=\(order.status), Items=\(order.items.count)")
+                        print("   Order \(index + 1): ID=\(order.id ?? "nil"), Amount=$\(order.amount), Status=\(order.status), Items=\(order.items.count), EventId=\(order.eventId ?? "nil")")
                     }
                     self?.orders = orders
                     self?.calculateSpendingStats()
+                    // Load events attended AFTER orders are loaded
+                    self?.loadEventsAttended(userId: userId)
                 } else if let error = error {
                     print("❌ FanProfileViewModel.loadOrders: Failed to load orders: \(error.localizedDescription)")
+                    self?.isLoading = false
                 }
-                self?.isLoading = false
             }
         }
     }
     
     private func loadEventsAttended(userId: String) {
+        print("🔍 FanProfileViewModel.loadEventsAttended: Starting to load events for userId: \(userId)")
+        
         // Get unique event IDs from orders
         let eventIds = Set(orders.compactMap { $0.eventId })
+        print("🔍 FanProfileViewModel.loadEventsAttended: Found \(eventIds.count) unique event IDs from \(orders.count) orders")
+        print("🔍 Event IDs: \(Array(eventIds))")
+        
+        // If no event IDs found, set loading to false and return empty array
+        if eventIds.isEmpty {
+            print("⚠️ FanProfileViewModel.loadEventsAttended: No event IDs found in orders")
+            DispatchQueue.main.async {
+                self.eventsAttended = []
+                self.isLoading = false
+            }
+            return
+        }
         
         var loadedEvents: [Event] = []
+        var loadErrors: [String] = []
         let group = DispatchGroup()
         
         for eventId in eventIds {
             group.enter()
+            print("🔍 FanProfileViewModel.loadEventsAttended: Fetching event with ID: \(eventId)")
             firestoreService.fetchSingleEvent(eventId: eventId) { event, error in
+                defer { group.leave() }
+                
                 if let event = event {
+                    print("✅ FanProfileViewModel.loadEventsAttended: Successfully loaded event: \(event.name)")
                     loadedEvents.append(event)
+                } else if let error = error {
+                    print("❌ FanProfileViewModel.loadEventsAttended: Failed to load event \(eventId): \(error.localizedDescription)")
+                    loadErrors.append("Event \(eventId): \(error.localizedDescription)")
+                } else {
+                    print("❌ FanProfileViewModel.loadEventsAttended: Event \(eventId) not found")
+                    loadErrors.append("Event \(eventId): Not found")
                 }
-                group.leave()
             }
         }
         
         group.notify(queue: .main) {
-            self.eventsAttended = loadedEvents.sorted { $0.startDate > $1.startDate }
+            print("🔍 FanProfileViewModel.loadEventsAttended: Loading complete. Successfully loaded \(loadedEvents.count) out of \(eventIds.count) events")
+            if !loadErrors.isEmpty {
+                print("⚠️ FanProfileViewModel.loadEventsAttended: Errors encountered:")
+                for error in loadErrors {
+                    print("   - \(error)")
+                }
+            }
+            
+            let sortedEvents = loadedEvents.sorted { $0.startDate > $1.startDate }
+            print("🔍 FanProfileViewModel.loadEventsAttended: Final events being set:")
+            for (index, event) in sortedEvents.enumerated() {
+                print("   Event \(index + 1): \(event.name) - ID: \(event.id ?? "nil") - Start: \(event.startDate) - Venue: \(event.venueName)")
+            }
+            
+            self.eventsAttended = sortedEvents
+            self.isLoading = false
         }
     }
     

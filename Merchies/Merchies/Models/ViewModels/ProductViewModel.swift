@@ -11,18 +11,32 @@ class ProductViewModel: ObservableObject {
     private let firestoreService = FirestoreService()
     
     func fetchProducts(for eventId: String) {
+        print("🏪 ProductViewModel: Starting to fetch products for event ID: \(eventId)")
         isLoading = true
+        error = nil  // Clear previous errors
         
         firestoreService.fetchProductsForEvent(eventId: eventId) { [weak self] (products: [Product]?, error: Error?) in
             DispatchQueue.main.async {
                 self?.isLoading = false
                 
                 if let error = error {
+                    print("❌ ProductViewModel: Error fetching products - \(error.localizedDescription)")
                     self?.error = error.localizedDescription
                     return
                 }
                 
-                self?.products = products ?? []
+                let fetchedProducts = products ?? []
+                print("✅ ProductViewModel: Successfully fetched \(fetchedProducts.count) products for event \(eventId)")
+                
+                if fetchedProducts.isEmpty {
+                    print("⚠️ ProductViewModel: No products found for event \(eventId)")
+                } else {
+                    for product in fetchedProducts {
+                        print("📦 Product: \(product.title) - Active: \(product.active)")
+                    }
+                }
+                
+                self?.products = fetchedProducts
             }
         }
     }

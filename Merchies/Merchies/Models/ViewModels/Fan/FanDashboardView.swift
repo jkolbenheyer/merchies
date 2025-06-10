@@ -83,11 +83,15 @@ struct FanDashboardView: View {
             .navigationTitle("Merchies")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Back") {
-                        // Reset location simulation and go back to nearby events
-                        locationService.inEventGeofence = false
-                        locationService.currentEvent = nil
-                        productViewModel.products.removeAll()
+                    if locationService.inEventGeofence {
+                        Button("Back") {
+                            print("🔙 Back button tapped - returning to events list")
+                            // Reset location simulation and go back to nearby events
+                            locationService.inEventGeofence = false
+                            locationService.currentEvent = nil
+                            productViewModel.products.removeAll()
+                            productViewModel.error = nil
+                        }
                     }
                 }
                 
@@ -323,16 +327,72 @@ struct FanDashboardView: View {
 
     @ViewBuilder
     private func productsGrid() -> some View {
-        LazyVGrid(
-            columns: [GridItem(.flexible()), GridItem(.flexible())],
-            spacing: 16
-        ) {
-            ForEach(productViewModel.products) { product in
-                ProductCardView(product: product, cartViewModel: cartViewModel)
-                    .onTapGesture {
-                        selectedProduct = product
-                        selectedDetailSizes.removeAll()
+        if productViewModel.isLoading {
+            VStack(spacing: 16) {
+                ProgressView()
+                    .scaleEffect(1.2)
+                    .progressViewStyle(CircularProgressViewStyle(tint: .purple))
+                Text("Loading products...")
+                    .font(.headline)
+                    .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity, minHeight: 200)
+        } else if let error = productViewModel.error {
+            VStack(spacing: 16) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 60))
+                    .foregroundColor(.red)
+                Text("Error loading products")
+                    .font(.headline)
+                Text(error)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                Button("Retry") {
+                    if let eventId = locationService.currentEvent?.id {
+                        productViewModel.fetchProducts(for: eventId)
                     }
+                }
+                .foregroundColor(.white)
+                .padding()
+                .background(Color.purple)
+                .cornerRadius(8)
+            }
+            .padding()
+        } else if productViewModel.products.isEmpty {
+            VStack(spacing: 20) {
+                Image(systemName: "tshirt")
+                    .font(.system(size: 60))
+                    .foregroundColor(.gray)
+                Text("No products available")
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                Text("This event doesn't have any merchandise available yet.")
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.gray)
+                Button("Refresh") {
+                    if let eventId = locationService.currentEvent?.id {
+                        productViewModel.fetchProducts(for: eventId)
+                    }
+                }
+                .foregroundColor(.white)
+                .padding()
+                .background(Color.purple)
+                .cornerRadius(8)
+            }
+            .padding()
+        } else {
+            LazyVGrid(
+                columns: [GridItem(.flexible()), GridItem(.flexible())],
+                spacing: 16
+            ) {
+                ForEach(productViewModel.products.filter { $0.active }) { product in
+                    ProductCardView(product: product, cartViewModel: cartViewModel)
+                        .onTapGesture {
+                            selectedProduct = product
+                            selectedDetailSizes.removeAll()
+                        }
+                }
             }
         }
     }
@@ -375,16 +435,26 @@ struct FanDashboardView: View {
             event.isActive || event.isUpcoming
         }
         
+        // Remove any remaining duplicates based on event name and venue (fallback)
+        let uniqueEvents = Array(Set(activeEvents.map { "\($0.name)-\($0.venueName)-\($0.startDate)" }))
+            .compactMap { uniqueKey in
+                activeEvents.first { "\($0.name)-\($0.venueName)-\($0.startDate)" == uniqueKey }
+            }
+        
         VStack(alignment: .leading, spacing: 16) {
             Text("Nearby Events")
                 .font(.title2)
                 .fontWeight(.bold)
-            ForEach(activeEvents) { event in
+            ForEach(uniqueEvents) { event in
                 Button {
+                    print("🎪 Fan tapped event: \(event.name) with ID: \(event.id ?? "nil")")
                     locationService.inEventGeofence = true
                     locationService.currentEvent    = event
                     if let id = event.id {
+                        print("🎪 Fetching products for event ID: \(id)")
                         productViewModel.fetchProducts(for: id)
+                    } else {
+                        print("⚠️ Event has no ID, cannot fetch products")
                     }
                 } label: {
                     FanEventCard(event: event)

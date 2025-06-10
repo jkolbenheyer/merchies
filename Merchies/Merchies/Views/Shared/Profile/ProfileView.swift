@@ -27,6 +27,12 @@ struct ProfileView: View {
             }
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.inline)
+            .refreshable {
+                // Pull to refresh functionality
+                if let userId = authViewModel.user?.uid {
+                    profileViewModel.refreshProfileData(userId: userId)
+                }
+            }
             .onAppear {
                 if let userId = authViewModel.user?.uid {
                     print("🔍 ProfileView.onAppear: Loading profile data for userId: \(userId)")
@@ -92,32 +98,38 @@ struct ProfileView: View {
             NavigationLink(destination: EventsAttendedView(eventsAttended: profileViewModel.eventsAttended)) {
                 StatCard(
                     title: "Events\nAttended",
-                    value: "\(profileViewModel.eventsAttended.count)",
+                    value: profileViewModel.isLoading ? "..." : "\(profileViewModel.eventsAttended.count)",
                     icon: "calendar",
-                    color: .purple
+                    color: .purple,
+                    isLoading: profileViewModel.isLoading
                 )
             }
             .buttonStyle(TappableCardButtonStyle())
+            .disabled(profileViewModel.isLoading)
             
             NavigationLink(destination: PurchaseHistoryView(orders: profileViewModel.orders)) {
                 StatCard(
                     title: "Total\nSpent",
-                    value: "$\(String(format: "%.0f", profileViewModel.totalSpent))",
+                    value: profileViewModel.isLoading ? "..." : "$\(String(format: "%.0f", profileViewModel.totalSpent))",
                     icon: "dollarsign.circle",
-                    color: .green
+                    color: .green,
+                    isLoading: profileViewModel.isLoading
                 )
             }
             .buttonStyle(TappableCardButtonStyle())
+            .disabled(profileViewModel.isLoading)
             
             NavigationLink(destination: PurchaseHistoryView(orders: profileViewModel.orders)) {
                 StatCard(
                     title: "Items\nPurchased",
-                    value: "\(profileViewModel.totalItemsPurchased)",
+                    value: profileViewModel.isLoading ? "..." : "\(profileViewModel.totalItemsPurchased)",
                     icon: "bag",
-                    color: .blue
+                    color: .blue,
+                    isLoading: profileViewModel.isLoading
                 )
             }
             .buttonStyle(TappableCardButtonStyle())
+            .disabled(profileViewModel.isLoading)
         }
     }
     
@@ -129,21 +141,23 @@ struct ProfileView: View {
             NavigationLink(destination: EventsAttendedView(eventsAttended: profileViewModel.eventsAttended)) {
                 ProfileSectionRow(
                     title: "Events Attended",
-                    subtitle: "\(profileViewModel.eventsAttended.count) events",
+                    subtitle: profileViewModel.isLoading ? "Loading..." : "\(profileViewModel.eventsAttended.count) events",
                     icon: "calendar",
                     color: .purple
                 )
             }
+            .disabled(profileViewModel.isLoading)
             
             // Purchase History
             NavigationLink(destination: PurchaseHistoryView(orders: profileViewModel.orders)) {
                 ProfileSectionRow(
                     title: "Purchase History",
-                    subtitle: "\(profileViewModel.orders.count) orders",
+                    subtitle: profileViewModel.isLoading ? "Loading..." : "\(profileViewModel.orders.count) orders",
                     icon: "bag",
                     color: .blue
                 )
             }
+            .disabled(profileViewModel.isLoading)
             
             // Payment Methods
             NavigationLink(destination: PaymentMethodsView()) {
@@ -222,17 +236,33 @@ struct StatCard: View {
     let value: String
     let icon: String
     let color: Color
+    let isLoading: Bool
+    
+    init(title: String, value: String, icon: String, color: Color, isLoading: Bool = false) {
+        self.title = title
+        self.value = value
+        self.icon = icon
+        self.color = color
+        self.isLoading = isLoading
+    }
     
     var body: some View {
         VStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundColor(color)
+            if isLoading {
+                ProgressView()
+                    .scaleEffect(0.8)
+                    .progressViewStyle(CircularProgressViewStyle(tint: color))
+            } else {
+                Image(systemName: icon)
+                    .font(.title2)
+                    .foregroundColor(color)
+            }
             
             Text(value)
                 .font(.title3)
                 .fontWeight(.bold)
                 .foregroundColor(.primary)
+                .opacity(isLoading ? 0.6 : 1.0)
             
             Text(title)
                 .font(.caption)
