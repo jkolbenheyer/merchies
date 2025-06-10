@@ -124,6 +124,10 @@ struct EditEventView: View {
                 Text("Are you sure you want to delete '\(vm.event.name)'? This action cannot be undone and will remove all associated products from this event.")
             }
             .onAppear {
+                print("🔍 EditEventView - onAppear triggered")
+                print("🔍 EditEventView - Event name: \(vm.event.name)")
+                print("🔍 EditEventView - Event ID: \(vm.event.id ?? "nil")")
+                
                 setupInitialState()
                 loadEventProducts()
                 loadEventImageIfNeeded()
@@ -711,7 +715,13 @@ struct CreateProductForEventView: View {
     }
     
     private func linkProductToEvent(productId: String) {
+        print("🔗 EditEventView - linkProductToEvent called")
+        print("🔗 EditEventView - Product ID: \(productId)")
+        print("🔗 EditEventView - Event name: \(event.name)")
+        print("🔗 EditEventView - Event ID: \(event.id ?? "nil")")
+        
         guard let eventId = event.id else {
+            print("❌ EditEventView - Event ID is nil when trying to link product")
             errorMessage = "Event ID not found"
             return
         }
