@@ -23,7 +23,7 @@ struct MerchantSettingsView: View {
                                     }
                                 } else {
                                     Circle()
-                                        .fill(Color.purple.gradient)
+                                        .fill(Color.cyan.gradient)
                                         .overlay(
                                             Image(systemName: "person.fill")
                                                 .foregroundColor(.white)
@@ -41,7 +41,7 @@ struct MerchantSettingsView: View {
                                     .foregroundColor(.secondary)
                                 Text("View Profile & Analytics")
                                     .font(.caption)
-                                    .foregroundColor(.purple)
+                                    .foregroundColor(.cyan)
                             }
                             
                             Spacer()

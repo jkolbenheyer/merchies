@@ -9,6 +9,7 @@ struct MerchantProductDetailView: View {
     @State private var product: Product  // Make product mutable
     @Environment(\.presentationMode) var presentationMode
     @EnvironmentObject var authViewModel: AuthViewModel
+    let onProductDeleted: (() -> Void)?  // Callback for when product is deleted
     @State private var isEditing = false
     @State private var inventory: [String: String] = [:]
     @State private var isActive: Bool = true
@@ -50,9 +51,10 @@ struct MerchantProductDetailView: View {
     // Image upload service
     private let imageUploadService = ImageUploadService()
     
-    // Custom initializer to set the initial product
-    init(product: Product) {
+    // Custom initializer to set the initial product and callback
+    init(product: Product, onProductDeleted: (() -> Void)? = nil) {
         self._product = State(initialValue: product)
+        self.onProductDeleted = onProductDeleted
     }
     
     var body: some View {
@@ -1389,6 +1391,9 @@ struct MerchantProductDetailView: View {
                     if !self.product.imageUrl.isEmpty && self.product.imageUrl.contains("firebasestorage.googleapis.com") {
                         self.imageUploadService.deleteImage(at: self.product.imageUrl) { _ in }
                     }
+                    
+                    // Call the deletion callback to refresh the parent view
+                    self.onProductDeleted?()
                     
                     self.presentationMode.wrappedValue.dismiss()
                 }

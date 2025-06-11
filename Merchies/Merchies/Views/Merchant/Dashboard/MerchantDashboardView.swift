@@ -152,7 +152,10 @@ struct MerchantDashboardView: View {
                 AddProductView(bandId: getMerchantBandId())
             }
             .sheet(item: $showingProductDetail) { product in
-                MerchantProductDetailView(product: product)
+                MerchantProductDetailView(product: product) {
+                    // Refresh products when a product is deleted
+                    loadMerchantProducts()
+                }
             }
             .onAppear(perform: loadMerchantData)
             .refreshable { loadMerchantData() }
