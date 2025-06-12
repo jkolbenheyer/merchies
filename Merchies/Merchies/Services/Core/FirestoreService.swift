@@ -542,6 +542,77 @@ class FirestoreService {
         }
     }
     
+    // NEW: Archive an event
+    func archiveEvent(eventId: String, completion: @escaping (Bool, Error?) -> Void) {
+        db.collection("events").document(eventId).updateData([
+            "archived": true
+        ]) { error in
+            if let error = error {
+                print("❌ Failed to archive event: \(error.localizedDescription)")
+                completion(false, error)
+            } else {
+                print("✅ Event archived successfully")
+                completion(true, nil)
+            }
+        }
+    }
+    
+    // NEW: Unarchive an event
+    func unarchiveEvent(eventId: String, completion: @escaping (Bool, Error?) -> Void) {
+        db.collection("events").document(eventId).updateData([
+            "archived": false
+        ]) { error in
+            if let error = error {
+                print("❌ Failed to unarchive event: \(error.localizedDescription)")
+                completion(false, error)
+            } else {
+                print("✅ Event unarchived successfully")
+                completion(true, nil)
+            }
+        }
+    }
+    
+    // NEW: Auto-archive expired events for a merchant
+    func autoArchiveExpiredEvents(for merchantId: String, completion: @escaping (Int, Error?) -> Void) {
+        let now = Date()
+        
+        db.collection("events")
+            .whereField("merchant_ids", arrayContains: merchantId)
+            .whereField("archived", isEqualTo: false)
+            .whereField("end_date", isLessThan: now)
+            .getDocuments { [weak self] snapshot, error in
+                if let error = error {
+                    print("❌ Failed to fetch expired events: \(error.localizedDescription)")
+                    completion(0, error)
+                    return
+                }
+                
+                guard let documents = snapshot?.documents, !documents.isEmpty else {
+                    print("✅ No expired events to archive")
+                    completion(0, nil)
+                    return
+                }
+                
+                let batch = self?.db.batch()
+                var archivedCount = 0
+                
+                for document in documents {
+                    batch?.updateData(["archived": true], forDocument: document.reference)
+                    archivedCount += 1
+                }
+                
+                batch?.commit { error in
+                    if let error = error {
+                        print("❌ Failed to auto-archive events: \(error.localizedDescription)")
+                        completion(0, error)
+                    } else {
+                        print("✅ Auto-archived \(archivedCount) expired events")
+                        completion(archivedCount, nil)
+                    }
+                }
+            }
+    }
+    
     func fetchNearbyEvents(latitude: Double, longitude: Double, radiusInKm: Double, completion: @escaping ([Event]?, Error?) -> Void) {
         // In a real app, you'd implement a geospatial query here
         // For simplicity, we'll just fetch all active events for now

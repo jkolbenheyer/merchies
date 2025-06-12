@@ -13,11 +13,20 @@ enum EventSortOption: String, CaseIterable {
     case statusDesc = "Status (Active First)"
 }
 
+enum EventFilterOption: String, CaseIterable {
+    case all = "All Events"
+    case active = "Active Only"
+    case archived = "Archived Only"
+    case upcoming = "Upcoming"
+    case past = "Past Events"
+}
+
 class EventViewModel: ObservableObject {
     @Published var events: [Event] = []
     @Published var isLoading: Bool = false
     @Published var error: String?
     @Published var sortOption: EventSortOption = .eventDateDesc
+    @Published var filterOption: EventFilterOption = .all
     
     private let firestoreService = FirestoreService()
     private var originalEvents: [Event] = []
@@ -91,8 +100,29 @@ class EventViewModel: ObservableObject {
         sortEvents()
     }
     
+    func setFilterOption(_ option: EventFilterOption) {
+        filterOption = option
+        sortEvents()
+    }
+    
     private func sortEvents() {
-        events = sortedEvents(originalEvents, by: sortOption)
+        let filteredEvents = filterEvents(originalEvents, by: filterOption)
+        events = sortedEvents(filteredEvents, by: sortOption)
+    }
+    
+    private func filterEvents(_ events: [Event], by filter: EventFilterOption) -> [Event] {
+        switch filter {
+        case .all:
+            return events
+        case .active:
+            return events.filter { !$0.archived && $0.active }
+        case .archived:
+            return events.filter { $0.archived }
+        case .upcoming:
+            return events.filter { !$0.archived && $0.isUpcoming }
+        case .past:
+            return events.filter { !$0.archived && $0.isPast }
+        }
     }
     
     private func sortedEvents(_ events: [Event], by option: EventSortOption) -> [Event] {
@@ -329,6 +359,74 @@ class EventViewModel: ObservableObject {
         error = nil
     }
     
+    // NEW: Archive an event
+    func archiveEvent(eventId: String, completion: @escaping (Bool) -> Void) {
+        isLoading = true
+        error = nil
+        
+        firestoreService.archiveEvent(eventId: eventId) { [weak self] success, error in
+            DispatchQueue.main.async {
+                self?.isLoading = false
+                
+                if let error = error {
+                    self?.error = error.localizedDescription
+                    completion(false)
+                } else if success {
+                    // Update the event in the local array
+                    if let index = self?.events.firstIndex(where: { $0.id == eventId }) {
+                        self?.events[index].archived = true
+                    }
+                    completion(true)
+                } else {
+                    self?.error = "Failed to archive event"
+                    completion(false)
+                }
+            }
+        }
+    }
+    
+    // NEW: Unarchive an event
+    func unarchiveEvent(eventId: String, completion: @escaping (Bool) -> Void) {
+        isLoading = true
+        error = nil
+        
+        firestoreService.unarchiveEvent(eventId: eventId) { [weak self] success, error in
+            DispatchQueue.main.async {
+                self?.isLoading = false
+                
+                if let error = error {
+                    self?.error = error.localizedDescription
+                    completion(false)
+                } else if success {
+                    // Update the event in the local array
+                    if let index = self?.events.firstIndex(where: { $0.id == eventId }) {
+                        self?.events[index].archived = false
+                    }
+                    completion(true)
+                } else {
+                    self?.error = "Failed to unarchive event"
+                    completion(false)
+                }
+            }
+        }
+    }
+    
+    // NEW: Auto-archive expired events
+    func autoArchiveExpiredEvents(for merchantId: String, completion: @escaping (Int) -> Void) {
+        firestoreService.autoArchiveExpiredEvents(for: merchantId) { [weak self] archivedCount, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    self?.error = error.localizedDescription
+                    completion(0)
+                } else {
+                    // Refresh events list to reflect archived status
+                    self?.fetchMerchantEvents(merchantId: merchantId)
+                    completion(archivedCount)
+                }
+            }
+        }
+    }
+    
     // NEW: Refresh events (useful for pull-to-refresh)
     func refreshEvents(for merchantId: String? = nil) {
         if let merchantId = merchantId {
@@ -337,5 +435,23 @@ class EventViewModel: ObservableObject {
             // If no merchant ID provided, clear the events
             events = []
         }
+    }
+    
+    // MARK: - Computed Properties
+    
+    var activeEventsCount: Int {
+        return originalEvents.filter { !$0.archived && $0.active }.count
+    }
+    
+    var archivedEventsCount: Int {
+        return originalEvents.filter { $0.archived }.count
+    }
+    
+    var expiredEventsCount: Int {
+        return originalEvents.filter { !$0.archived && $0.isPast }.count
+    }
+    
+    var upcomingEventsCount: Int {
+        return originalEvents.filter { !$0.archived && $0.isUpcoming }.count
     }
 }

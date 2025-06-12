@@ -74,6 +74,12 @@ struct EditEventView: View {
             .navigationTitle("Edit Event")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") {
+                        presentationMode.wrappedValue.dismiss()
+                    }
+                }
+                
                 ToolbarItem(placement: .primaryAction) {
                     Button("Save") {
                         saveEvent()

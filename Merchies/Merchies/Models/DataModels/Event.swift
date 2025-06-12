@@ -13,6 +13,7 @@ struct Event: Identifiable, Codable {
     var longitude: Double
     var geofenceRadius: Double    // in meters
     var active: Bool
+    var archived: Bool            // Whether the event is archived
     var merchantIds: [String]
     var imageUrl: String?         // Optional event image URL
     var productIds: [String]      // Array of product IDs at this event
@@ -32,6 +33,7 @@ struct Event: Identifiable, Codable {
         case longitude
         case geofenceRadius = "geofence_radius"
         case active
+        case archived
         case merchantIds   = "merchant_ids"
         case imageUrl      = "image_url"
         case productIds    = "product_ids"
@@ -55,6 +57,7 @@ struct Event: Identifiable, Codable {
         self.longitude = try container.decode(Double.self, forKey: .longitude)
         self.geofenceRadius = try container.decode(Double.self, forKey: .geofenceRadius)
         self.active = try container.decode(Bool.self, forKey: .active)
+        self.archived = try container.decodeIfPresent(Bool.self, forKey: .archived) ?? false // Default to false for legacy events
         self.merchantIds = try container.decode([String].self, forKey: .merchantIds)
         
         // Decode optional fields
@@ -81,6 +84,7 @@ struct Event: Identifiable, Codable {
         longitude: Double,
         geofenceRadius: Double,
         active: Bool,
+        archived: Bool = false,
         merchantIds: [String],
         imageUrl: String? = nil,
         productIds: [String] = [],
@@ -99,6 +103,7 @@ struct Event: Identifiable, Codable {
         self.longitude      = longitude
         self.geofenceRadius = geofenceRadius
         self.active         = active
+        self.archived       = archived
         self.merchantIds    = merchantIds
         self.imageUrl       = imageUrl
         self.productIds     = productIds
@@ -159,13 +164,20 @@ struct Event: Identifiable, Codable {
     
     /// Status description for UI display
     var statusDescription: String {
-        if isActive {
+        if archived {
+            return "Archived"
+        } else if isActive {
             return "Live Now"
         } else if isUpcoming {
             return "Upcoming"
         } else {
             return "Ended"
         }
+    }
+    
+    /// Check if event is eligible for auto-archiving (ended and not already archived)
+    var shouldAutoArchive: Bool {
+        return isPast && !archived
     }
     
     /// Check if a merchant is associated with this event

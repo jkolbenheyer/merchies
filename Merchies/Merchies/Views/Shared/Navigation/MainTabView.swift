@@ -36,6 +36,12 @@ struct MainTabView: View {
                     }
                     .environmentObject(authViewModel)
                 
+                MerchantOrdersView(initialFilter: .all)
+                    .tabItem {
+                        Label("Orders", systemImage: "bag.fill")
+                    }
+                    .environmentObject(authViewModel)
+                
                 OrderScannerView()
                     .tabItem {
                         Label("Scan", systemImage: "qrcode.viewfinder")

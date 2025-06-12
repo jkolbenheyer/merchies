@@ -3,6 +3,7 @@ import Foundation
 
 struct MerchantSettingsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
+    @StateObject private var autoArchiveService = AutoArchiveService()
     
     var body: some View {
         NavigationView {
@@ -80,6 +81,15 @@ struct MerchantSettingsView: View {
                     }
                 }
                 
+                Section(header: Text("Event Management")) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        AutoArchiveSettingsView(autoArchiveService: autoArchiveService)
+                            .environmentObject(authViewModel)
+                    }
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                }
+                
                 Section(header: Text("Support & Legal")) {
                     NavigationLink("Help & Support") {
                         MerchantHelpSupportView()
@@ -145,3 +155,4 @@ struct MerchantPrivacyPolicyView: View {
             .navigationTitle("Privacy")
     }
 }
+

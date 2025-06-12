@@ -22,41 +22,75 @@ struct EventsListView: View {
                     }
                 } else {
                     VStack(spacing: 0) {
-                        // Sort controls
-                        HStack {
-                            Text("\(eventViewModel.events.count) events")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
+                        // Filter and Sort controls
+                        VStack(spacing: 8) {
+                            // Filter chips
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(EventFilterOption.allCases, id: \.self) { option in
+                                        Button(action: {
+                                            eventViewModel.setFilterOption(option)
+                                        }) {
+                                            HStack(spacing: 4) {
+                                                Text(option.rawValue)
+                                                    .font(.caption)
+                                                    .fontWeight(.medium)
+                                                
+                                                Text("\(countForFilter(option))")
+                                                    .font(.caption2)
+                                                    .fontWeight(.bold)
+                                                    .padding(.horizontal, 4)
+                                                    .padding(.vertical, 1)
+                                                    .background(eventViewModel.filterOption == option ? Color.white.opacity(0.3) : Color.gray.opacity(0.3))
+                                                    .cornerRadius(8)
+                                            }
+                                            .foregroundColor(eventViewModel.filterOption == option ? .white : .primary)
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 6)
+                                            .background(eventViewModel.filterOption == option ? Color.cyan : Color(.systemGray5))
+                                            .cornerRadius(16)
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                    }
+                                }
+                                .padding(.horizontal)
+                            }
                             
-                            Spacer()
-                            
-                            Menu {
-                                ForEach(EventSortOption.allCases, id: \.self) { option in
-                                    Button(action: {
-                                        eventViewModel.setSortOption(option)
-                                    }) {
-                                        HStack {
-                                            Text(option.rawValue)
-                                            if eventViewModel.sortOption == option {
-                                                Spacer()
-                                                Image(systemName: "checkmark")
-                                                    .foregroundColor(.cyan)
+                            HStack {
+                                Text("\(eventViewModel.events.count) events")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                
+                                Spacer()
+                                
+                                Menu {
+                                    ForEach(EventSortOption.allCases, id: \.self) { option in
+                                        Button(action: {
+                                            eventViewModel.setSortOption(option)
+                                        }) {
+                                            HStack {
+                                                Text(option.rawValue)
+                                                if eventViewModel.sortOption == option {
+                                                    Spacer()
+                                                    Image(systemName: "checkmark")
+                                                        .foregroundColor(.cyan)
+                                                }
                                             }
                                         }
                                     }
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "arrow.up.arrow.down")
+                                            .font(.caption)
+                                        Text("Sort")
+                                            .font(.caption)
+                                    }
+                                    .foregroundColor(.cyan)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.cyan.opacity(0.1))
+                                    .cornerRadius(6)
                                 }
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "arrow.up.arrow.down")
-                                        .font(.caption)
-                                    Text("Sort")
-                                        .font(.caption)
-                                }
-                                .foregroundColor(.cyan)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.cyan.opacity(0.1))
-                                .cornerRadius(6)
                             }
                         }
                         .padding(.horizontal)
@@ -65,8 +99,24 @@ struct EventsListView: View {
                         
                         List {
                             ForEach(eventViewModel.events) { event in
-                                NavigationLink(destination: EditEventView(vm: SingleEventViewModel(event: event))) {
-                                    EnhancedEventListRow(event: event)
+                                EnhancedEventListRow(
+                                    event: event,
+                                    onArchiveToggle: { eventId in
+                                        toggleArchiveStatus(eventId: eventId)
+                                    },
+                                    onEventTap: {
+                                        // Navigation will be handled within the row
+                                    }
+                                )
+                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                    Button(action: {
+                                        guard let eventId = event.id else { return }
+                                        toggleArchiveStatus(eventId: eventId)
+                                    }) {
+                                        Label(event.archived ? "Restore" : "Archive", 
+                                              systemImage: event.archived ? "archivebox" : "archivebox.fill")
+                                    }
+                                    .tint(event.archived ? .orange : .purple)
                                 }
                             }
                         }
@@ -114,92 +164,151 @@ struct EventsListView: View {
             }
         }
     }
+    
+    // MARK: - Helper Functions
+    
+    private func countForFilter(_ filter: EventFilterOption) -> Int {
+        switch filter {
+        case .all:
+            return eventViewModel.activeEventsCount + eventViewModel.archivedEventsCount + eventViewModel.expiredEventsCount + eventViewModel.upcomingEventsCount
+        case .active:
+            return eventViewModel.activeEventsCount
+        case .archived:
+            return eventViewModel.archivedEventsCount
+        case .upcoming:
+            return eventViewModel.upcomingEventsCount
+        case .past:
+            return eventViewModel.expiredEventsCount
+        }
+    }
+    
+    private func toggleArchiveStatus(eventId: String) {
+        guard let event = eventViewModel.events.first(where: { $0.id == eventId }) else { return }
+        
+        if event.archived {
+            eventViewModel.unarchiveEvent(eventId: eventId) { success in
+                if success {
+                    print("✅ Event unarchived successfully")
+                }
+            }
+        } else {
+            eventViewModel.archiveEvent(eventId: eventId) { success in
+                if success {
+                    print("✅ Event archived successfully")
+                }
+            }
+        }
+    }
 }
 
 // MARK: - Enhanced Event List Row with Image Support
 struct EnhancedEventListRow: View {
     let event: Event
+    let onArchiveToggle: (String) -> Void
+    let onEventTap: () -> Void
     
     var body: some View {
         HStack(spacing: 12) {
-            // Event Image
-            AsyncImage(url: event.imageUrl != nil ? URL(string: event.imageUrl!) : nil) { phase in
-                switch phase {
-                case .empty:
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(width: 80, height: 80)
-                        .cornerRadius(8)
-                        .overlay(
-                            ProgressView()
-                                .scaleEffect(0.8)
-                        )
-                case .success(let image):
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 80, height: 80)
-                        .cornerRadius(8)
-                        .clipped()
-                case .failure:
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(width: 80, height: 80)
-                        .cornerRadius(8)
-                        .overlay(
-                            Image(systemName: "calendar")
-                                .font(.title2)
-                                .foregroundColor(.gray)
-                        )
-                @unknown default:
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(width: 80, height: 80)
-                        .cornerRadius(8)
+            // Main content - tappable for navigation
+            NavigationLink(destination: EditEventView(vm: SingleEventViewModel(event: event))) {
+                HStack(spacing: 12) {
+                    // Event Image
+                    AsyncImage(url: event.imageUrl != nil ? URL(string: event.imageUrl!) : nil) { phase in
+                        switch phase {
+                        case .empty:
+                            Rectangle()
+                                .fill(Color.gray.opacity(0.2))
+                                .frame(width: 80, height: 80)
+                                .cornerRadius(8)
+                                .overlay(
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                )
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 80, height: 80)
+                                .cornerRadius(8)
+                                .clipped()
+                        case .failure:
+                            Rectangle()
+                                .fill(Color.gray.opacity(0.2))
+                                .frame(width: 80, height: 80)
+                                .cornerRadius(8)
+                                .overlay(
+                                    Image(systemName: "calendar")
+                                        .font(.title2)
+                                        .foregroundColor(.gray)
+                                )
+                        @unknown default:
+                            Rectangle()
+                                .fill(Color.gray.opacity(0.2))
+                                .frame(width: 80, height: 80)
+                                .cornerRadius(8)
+                        }
+                    }
+                    
+                    // Event Details
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(event.name)
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .lineLimit(1)
+                            
+                            Spacer()
+                            
+                            // Archive status badge
+                            if event.archived {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "archivebox.fill")
+                                        .font(.caption2)
+                                    Text("Archived")
+                                        .font(.caption2)
+                                        .fontWeight(.medium)
+                                }
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.purple)
+                                .cornerRadius(8)
+                            } else {
+                                // Status indicator
+                                Circle()
+                                    .fill(event.isActive ? Color.green : (event.isUpcoming ? Color.orange : Color.gray))
+                                    .frame(width: 12, height: 12)
+                            }
+                        }
+                        
+                        Text(event.venueName)
+                            .font(.subheadline)
+                            .foregroundColor(.cyan)
+                            .lineLimit(1)
+                        
+                        HStack {
+                            Label(event.formattedDateRange, systemImage: "calendar")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                            
+                            Spacer()
+                            
+                            Text("\(event.productIds.count) products")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        if !event.address.isEmpty {
+                            Label(event.address, systemImage: "location")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
                 }
             }
             
-            // Event Details
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text(event.name)
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                        .lineLimit(1)
-                    
-                    Spacer()
-                    
-                    // Status indicator
-                    Circle()
-                        .fill(event.isActive ? Color.green : (event.isUpcoming ? Color.orange : Color.gray))
-                        .frame(width: 12, height: 12)
-                }
-                
-                Text(event.venueName)
-                    .font(.subheadline)
-                    .foregroundColor(.cyan)
-                    .lineLimit(1)
-                
-                HStack {
-                    Label(event.formattedDateRange, systemImage: "calendar")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                    
-                    Spacer()
-                    
-                    Text("\(event.productIds.count) products")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                
-                if !event.address.isEmpty {
-                    Label(event.address, systemImage: "location")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                }
-            }
         }
         .padding(.vertical, 4)
     }

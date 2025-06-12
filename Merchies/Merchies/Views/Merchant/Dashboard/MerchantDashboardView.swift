@@ -8,121 +8,56 @@ import Foundation
 struct MerchantDashboardView: View {
     @StateObject private var productViewModel = ProductViewModel()
     @StateObject private var eventViewModel = EventViewModel()
+    @StateObject private var orderNotificationService = OrderNotificationService()
     @EnvironmentObject var authViewModel: AuthViewModel
     @State private var showingAddProduct = false
     @State private var showingCreateEvent = false
     @State private var showingEventsList = false
     @State private var showingProductDetail: Product? = nil
+    @State private var showingEditEvent: Event? = nil
     @State private var isStoreActive = true
     @State private var errorMessage: String? = nil
+    @State private var showArchivedEvents = false
     
     var body: some View {
         NavigationView {
-            VStack {
-            
+            VStack(spacing: 0) {
+                // Order Alert Banner
+                OrderAlertBanner(notificationService: orderNotificationService)
+                    .padding(.horizontal)
+                    .padding(.top, orderNotificationService.hasNewOrders ? 8 : 0)
                 
-                // Quick Actions Section
-                HStack(spacing: 15) {
-                    // Manage Events Button
-                    Button(action: { showingCreateEvent = true }) {
-                        VStack(spacing: 8) {
-                            Image(systemName: "calendar.badge.plus")
-                                .font(.system(size: 24))
-                                .foregroundColor(.white)
-                            Text("Add Event")
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .foregroundColor(.white)
-                                .multilineTextAlignment(.center)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(Color.cyan)
-                        .cornerRadius(10)
-                    }
-                    // Add Product Button
-                    Button(action: { showingAddProduct = true }) {
-                        VStack(spacing: 8) {
-                            Image(systemName: "plus.circle")
-                                .font(.system(size: 24))
-                                .foregroundColor(.cyan)
-                            Text("Add Product")
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .foregroundColor(.cyan)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(Color.cyan.opacity(0.1))
-                        .cornerRadius(10)
-                    }
-                }
-                .padding(.horizontal)
-                .padding(.bottom, 10)
-                
-                
-                
-                if let error = errorMessage {
-                    Text(error)
-                        .foregroundColor(.red)
-                        .padding()
-                }
-                
-                if productViewModel.isLoading || eventViewModel.isLoading {
-                    ProgressView()
-                        .scaleEffect(1.5)
-                        .progressViewStyle(CircularProgressViewStyle(tint: .cyan))
-                } else if productViewModel.products.isEmpty && eventViewModel.events.isEmpty {
-                    // Empty state
+                ScrollView {
                     VStack(spacing: 20) {
-                        Image(systemName: "storefront")
-                            .font(.system(size: 60))
-                            .foregroundColor(.gray)
-                        Text("Welcome to MerchPit!")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                        Text("Start by creating an event and adding products to build your mobile merch store")
-                            .multilineTextAlignment(.center)
-                            .foregroundColor(.gray)
-                            .padding(.horizontal)
-                        VStack(spacing: 12) {
-                            Button(action: { showingCreateEvent = true }) {
-                                HStack {
-                                    Image(systemName: "calendar.badge.plus")
-                                    Text("Create Your First Event")
-                                }
-                                .fontWeight(.semibold)
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.cyan)
-                                .cornerRadius(10)
-                            }
-                            Button(action: { showingAddProduct = true }) {
-                                HStack {
-                                    Image(systemName: "plus")
-                                    Text("Add Your First Product")
-                                }
-                                .fontWeight(.semibold)
-                                .foregroundColor(.cyan)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.cyan.opacity(0.1))
-                                .cornerRadius(10)
-                            }
+                        // Quick Stats Section
+                        if orderNotificationService.recentOrders.count > 0 {
+                            quickStatsSection
                         }
-                        .padding(.horizontal)
-                    }
-                    .padding(.top, 30)
-                } else {
-                    // Content
-                    ScrollView {
-                        VStack(spacing: 20) {
+                        
+                        // Quick Actions Section
+                        quickActionsSection
+                        
+                        // Error Message
+                        if let error = errorMessage {
+                            Text(error)
+                                .foregroundColor(.red)
+                                .padding()
+                        }
+                        
+                        // Loading or Content
+                        if productViewModel.isLoading || eventViewModel.isLoading {
+                            ProgressView()
+                                .scaleEffect(1.5)
+                                .progressViewStyle(CircularProgressViewStyle(tint: .cyan))
+                        } else if productViewModel.products.isEmpty && eventViewModel.events.isEmpty {
+                            emptyStateSection
+                        } else {
+                            // Content
                             if !eventViewModel.events.isEmpty { EventsSection() }
                             if !productViewModel.products.isEmpty { ProductsSection() }
                         }
-                        .padding(.horizontal)
                     }
+                    .padding(.horizontal)
                 }
             }
             .navigationTitle("Your Stuff")
@@ -148,18 +83,207 @@ struct MerchantDashboardView: View {
             .sheet(isPresented: $showingCreateEvent, onDismiss: loadMerchantData) { CreateEventView() }
             .sheet(isPresented: $showingEventsList, onDismiss: loadMerchantData) { EventsListView() }
             .sheet(isPresented: $showingAddProduct, onDismiss: loadMerchantProducts) {
-                // FIXED: Use AddProductView instead of MerchProductEditView
                 AddProductView(bandId: getMerchantBandId())
             }
             .sheet(item: $showingProductDetail) { product in
                 MerchantProductDetailView(product: product) {
-                    // Refresh products when a product is deleted
                     loadMerchantProducts()
                 }
             }
-            .onAppear(perform: loadMerchantData)
+            .sheet(item: $showingEditEvent) { event in
+                EditEventView(vm: SingleEventViewModel(event: event))
+                    .onDisappear {
+                        loadMerchantData()
+                    }
+            }
+            .onAppear(perform: {
+                loadMerchantData()
+                startOrderNotifications()
+            })
+            .onDisappear {
+                orderNotificationService.stopListening()
+            }
             .refreshable { loadMerchantData() }
         }
+    }
+    
+    // MARK: - Computed Properties
+    
+    private var filteredEvents: [Event] {
+        if showArchivedEvents {
+            return eventViewModel.events
+        } else {
+            return eventViewModel.events.filter { !$0.archived }
+        }
+    }
+    
+    // MARK: - Quick Stats Section
+    
+    private var quickStatsSection: some View {
+        HStack {
+            NavigationLink(destination: MerchantOrdersView(initialFilter: .todaysOrders)) {
+                OrderStatCard(
+                    title: "Today's Orders",
+                    value: "\(orderNotificationService.todaysOrdersCount)",
+                    icon: "bag.fill",
+                    color: .blue
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            NavigationLink(destination: MerchantOrdersView(initialFilter: .pendingPickup)) {
+                OrderStatCard(
+                    title: "Pending",
+                    value: "\(orderNotificationService.pendingOrdersCount)",
+                    icon: "clock.fill",
+                    color: .orange
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            NavigationLink(destination: MerchantOrdersView(initialFilter: .todaysCompleted)) {
+                OrderStatCard(
+                    title: "Today's Revenue",
+                    value: "$\(String(format: "%.0f", orderNotificationService.todaysRevenue))",
+                    icon: "dollarsign.circle.fill",
+                    color: .green
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+    
+    // MARK: - Quick Actions Section
+    
+    private var quickActionsSection: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 15) {
+                // Manage Events Button
+                Button(action: { showingCreateEvent = true }) {
+                    VStack(spacing: 8) {
+                        Image(systemName: "calendar.badge.plus")
+                            .font(.system(size: 24))
+                            .foregroundColor(.white)
+                        Text("Add Event")
+                            .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(.white)
+                                .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Color.cyan)
+                    .cornerRadius(10)
+                }
+                
+                // Add Product Button
+                Button(action: { showingAddProduct = true }) {
+                    VStack(spacing: 8) {
+                        Image(systemName: "plus.circle")
+                            .font(.system(size: 24))
+                            .foregroundColor(.cyan)
+                        Text("Add Product")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.cyan)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Color.cyan.opacity(0.1))
+                    .cornerRadius(10)
+                }
+            }
+        }
+    }
+    
+    // MARK: - Empty State Section
+    
+    private var emptyStateSection: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "storefront")
+                .font(.system(size: 60))
+                .foregroundColor(.gray)
+            Text("Welcome to MerchPit!")
+                .font(.title2)
+                .fontWeight(.bold)
+            Text("Start by creating an event and adding products to build your mobile merch store")
+                .multilineTextAlignment(.center)
+                .foregroundColor(.gray)
+                .padding(.horizontal)
+            VStack(spacing: 12) {
+                Button(action: { showingCreateEvent = true }) {
+                    HStack {
+                        Image(systemName: "calendar.badge.plus")
+                        Text("Create Your First Event")
+                    }
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.cyan)
+                    .cornerRadius(10)
+                }
+                Button(action: { showingAddProduct = true }) {
+                    HStack {
+                        Image(systemName: "plus")
+                        Text("Add Your First Product")
+                    }
+                    .fontWeight(.semibold)
+                    .foregroundColor(.cyan)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.cyan.opacity(0.1))
+                    .cornerRadius(10)
+                }
+            }
+            .padding(.horizontal)
+        }
+        .padding(.top, 30)
+    }
+    
+    // MARK: - Helper Functions
+    
+    private func startOrderNotifications() {
+        guard let user = authViewModel.user else { return }
+        orderNotificationService.startListening(for: user.uid)
+    }
+    
+    private func loadMerchantData() {
+        guard let user = authViewModel.user else { 
+            errorMessage = "User not logged in"
+            return 
+        }
+        eventViewModel.fetchMerchantEvents(merchantId: user.uid)
+        loadMerchantProducts()
+    }
+    
+    func getMerchantBandId() -> String {
+        return authViewModel.user?.uid ?? "mock_band_id"
+    }
+    
+    func loadMerchantProducts() {
+        guard let user = authViewModel.user else { 
+            errorMessage = "User not logged in"
+            return 
+        }
+        let db = Firestore.firestore()
+        productViewModel.isLoading = true
+        db.collection("products").whereField("band_id", isEqualTo: user.uid)
+            .getDocuments { snapshot, error in
+                DispatchQueue.main.async {
+                    self.productViewModel.isLoading = false
+                    if let error = error {
+                        self.errorMessage = "Error fetching products: \(error.localizedDescription)"
+                        return
+                    }
+                    self.productViewModel.products = snapshot?.documents.compactMap {
+                        try? $0.data(as: Product.self)
+                    } ?? []
+                }
+            }
     }
     
     // MARK: - Enhanced Events Section with Images
@@ -171,6 +295,26 @@ struct MerchantDashboardView: View {
                     .font(.headline)
                     .fontWeight(.semibold)
                 Spacer()
+                
+                // Archive toggle
+                Button(action: {
+                    showArchivedEvents.toggle()
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: showArchivedEvents ? "archivebox.fill" : "archivebox")
+                            .font(.caption)
+                        Text(showArchivedEvents ? "Hide Archived" : "Show Archived")
+                            .font(.caption)
+                    }
+                    .foregroundColor(showArchivedEvents ? .orange : .purple)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background((showArchivedEvents ? Color.orange : Color.purple).opacity(0.1))
+                    .cornerRadius(6)
+                }
+                .buttonStyle(PlainButtonStyle())
+                
+                // Sort menu
                 Menu {
                     ForEach(EventSortOption.allCases, id: \.self) { option in
                         Button(action: {
@@ -202,25 +346,31 @@ struct MerchantDashboardView: View {
             }
             
             HStack {
-                Text("\(eventViewModel.events.count) item\(eventViewModel.events.count == 1 ? "" : "s")")
+                Text("\(filteredEvents.count) item\(filteredEvents.count == 1 ? "" : "s")")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
+                if showArchivedEvents {
+                    Text("• \(eventViewModel.events.filter { $0.archived }.count) archived")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                }
                 Spacer()
                 Text("Sorted by: \(eventViewModel.sortOption.rawValue)")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
             LazyVStack(spacing: 12) {
-                ForEach(eventViewModel.events.indices, id: \.self) { index in
-                    let event = eventViewModel.events[index]
-                    NavigationLink(destination: EditEventView(vm: SingleEventViewModel(event: event))) {
-                        EnhancedEventRow(event: event)
-                    }
-                    .onTapGesture {
-                        print("🔍 MerchantDashboard - Navigating to event: \(event.name)")
-                        print("🔍 MerchantDashboard - Event ID: \(event.id ?? "nil")")
-                    }
-                    .buttonStyle(PlainButtonStyle())
+                ForEach(filteredEvents.indices, id: \.self) { index in
+                    let event = filteredEvents[index]
+                    SwipeableEventRow(
+                        event: event,
+                        onArchiveToggle: { eventId in
+                            toggleArchiveStatus(eventId: eventId)
+                        },
+                        onEventTap: { event in
+                            showingEditEvent = event
+                        }
+                    )
                 }
             }
         }
@@ -259,117 +409,133 @@ struct MerchantDashboardView: View {
         formatter.timeStyle = .short
         return formatter.string(from: date)
     }
-
-    func getMerchantBandId() -> String {
-        return authViewModel.user?.uid ?? "mock_band_id"
-    }
-    func loadMerchantData() {
-        guard let user = authViewModel.user else { errorMessage = "User not logged in"; return }
-        eventViewModel.fetchMerchantEvents(merchantId: user.uid)
-        loadMerchantProducts()
-    }
-    func loadMerchantProducts() {
-            guard let user = authViewModel.user else { errorMessage = "User not logged in"; return }
-            let db = Firestore.firestore()
-            productViewModel.isLoading = true
-            db.collection("products").whereField("band_id", isEqualTo: user.uid)
-                .getDocuments { snapshot, error in
-                    DispatchQueue.main.async {
-                        self.productViewModel.isLoading = false
-                        if let error = error {
-                            self.errorMessage = "Error fetching products: \(error.localizedDescription)"
-                            return
-                        }
-                        self.productViewModel.products = snapshot?.documents.compactMap {
-                            try? $0.data(as: Product.self)
-                        } ?? []
-                    }
+    
+    private func toggleArchiveStatus(eventId: String) {
+        guard let event = eventViewModel.events.first(where: { $0.id == eventId }) else { return }
+        
+        if event.archived {
+            eventViewModel.unarchiveEvent(eventId: eventId) { success in
+                if success {
+                    print("✅ Event unarchived successfully")
                 }
+            }
+        } else {
+            eventViewModel.archiveEvent(eventId: eventId) { success in
+                if success {
+                    print("✅ Event archived successfully")
+                }
+            }
         }
+    }
+
 }
 
 // MARK: - Enhanced Event Row with Safe Firebase Storage Loading
 struct EnhancedEventRow: View {
     let event: Event
+    let onArchiveToggle: (String) -> Void
+    let onEventTap: (Event) -> Void
     @State private var loadedEventImage: UIImage?
     @State private var isLoadingEventImage = false
     
     var body: some View {
         HStack(spacing: 12) {
-            // Event Image with Safe Firebase Storage Loading
-            Group {
-                if let loadedImage = loadedEventImage {
-                    Image(uiImage: loadedImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 60, height: 60)
-                        .cornerRadius(8)
-                        .clipped()
-                } else if isLoadingEventImage {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(width: 60, height: 60)
-                        .cornerRadius(8)
-                        .overlay(
-                            ProgressView()
-                                .scaleEffect(0.8)
-                        )
-                } else {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(width: 60, height: 60)
-                        .cornerRadius(8)
-                        .overlay(
+            // Main content - tappable for navigation
+            Button(action: { onEventTap(event) }) {
+                HStack(spacing: 12) {
+                    // Event Image with Safe Firebase Storage Loading
+                    Group {
+                        if let loadedImage = loadedEventImage {
+                            Image(uiImage: loadedImage)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 60, height: 60)
+                                .cornerRadius(8)
+                                .clipped()
+                        } else if isLoadingEventImage {
+                            Rectangle()
+                                .fill(Color.gray.opacity(0.2))
+                                .frame(width: 60, height: 60)
+                                .cornerRadius(8)
+                                .overlay(
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                )
+                        } else {
+                            Rectangle()
+                                .fill(Color.gray.opacity(0.2))
+                                .frame(width: 60, height: 60)
+                                .cornerRadius(8)
+                                .overlay(
+                                    Image(systemName: "calendar")
+                                        .font(.title3)
+                                        .foregroundColor(.gray)
+                                )
+                        }
+                    }
+                    
+                    // Event Details
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(event.name)
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .lineLimit(1)
+                            Spacer()
+                            
+                            // Archive status badge
+                            if event.archived {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "archivebox.fill")
+                                        .font(.caption2)
+                                    Text("Archived")
+                                        .font(.caption2)
+                                        .fontWeight(.medium)
+                                }
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.purple)
+                                .cornerRadius(8)
+                            } else {
+                                // Status indicator
+                                HStack(spacing: 4) {
+                                    Circle()
+                                        .fill(event.isActive ? Color.green : (event.isUpcoming ? Color.orange : Color.gray))
+                                        .frame(width: 6, height: 6)
+                                    Text(event.isActive ? "Live" : (event.isUpcoming ? "Upcoming" : "Ended"))
+                                        .font(.caption2)
+                                        .foregroundColor(event.isActive ? .green : (event.isUpcoming ? .orange : .gray))
+                                }
+                            }
+                        }
+                        
+                        Text(event.venueName)
+                            .font(.caption)
+                            .foregroundColor(.cyan)
+                            .lineLimit(1)
+                        
+                        HStack(spacing: 4) {
                             Image(systemName: "calendar")
-                                .font(.title3)
-                                .foregroundColor(.gray)
-                        )
-                }
-            }
-            
-            // Event Details
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(event.name)
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .lineLimit(1)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
+                            Text("\(formatDateTime(event.startDate)) - \(formatDateTime(event.endDate))")
+                            Spacer()
+                        }
+                        .font(.caption2)
                         .foregroundColor(.secondary)
-                }
-                
-                Text(event.venueName)
-                    .font(.caption)
-                    .foregroundColor(.cyan)
-                    .lineLimit(1)
-                
-                HStack(spacing: 4) {
-                    Image(systemName: "calendar")
-                    Text("\(formatDateTime(event.startDate)) - \(formatDateTime(event.endDate))")
-                    Spacer()
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(event.isActive ? Color.green : (event.isUpcoming ? Color.orange : Color.gray))
-                            .frame(width: 6, height: 6)
-                        Text(event.isActive ? "Live" : (event.isUpcoming ? "Upcoming" : "Ended"))
-                            .font(.caption2)
-                            .foregroundColor(event.isActive ? .green : (event.isUpcoming ? .orange : .gray))
+                        
+                        HStack(spacing: 4) {
+                            Image(systemName: "location")
+                            Text(event.address)
+                            Spacer()
+                            Text("\(event.productIds.count) products")
+                        }
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
                     }
                 }
-                .font(.caption2)
-                .foregroundColor(.secondary)
-                
-                HStack(spacing: 4) {
-                    Image(systemName: "location")
-                    Text(event.address)
-                    Spacer()
-                    Text("\(event.productIds.count) products")
-                }
-                .font(.caption2)
-                .foregroundColor(.secondary)
             }
+            .buttonStyle(PlainButtonStyle())
+            
         }
         .padding()
         .background(Color(.systemGray6))
@@ -600,6 +766,97 @@ struct ProductRow: View {
                     }
                 }
             }.resume()
+        }
+    }
+}
+
+// MARK: - Swipeable Event Row Component
+struct SwipeableEventRow: View {
+    let event: Event
+    let onArchiveToggle: (String) -> Void
+    let onEventTap: (Event) -> Void
+    @State private var offsetX: CGFloat = 0
+    @State private var showingAction = false
+    
+    var body: some View {
+        ZStack {
+            // Background action button
+            HStack {
+                Spacer()
+                Button(action: {
+                    guard let eventId = event.id else { return }
+                    onArchiveToggle(eventId)
+                    withAnimation(.spring()) {
+                        offsetX = 0
+                        showingAction = false
+                    }
+                }) {
+                    VStack(spacing: 4) {
+                        Image(systemName: event.archived ? "archivebox" : "archivebox.fill")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                        Text(event.archived ? "Restore" : "Archive")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.white)
+                    }
+                    .frame(width: 80)
+                    .frame(maxHeight: .infinity)
+                    .background(event.archived ? Color.orange : Color.purple)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+            .opacity(showingAction ? 1 : 0)
+            
+            // Main event row
+            EnhancedEventRow(event: event, onArchiveToggle: onArchiveToggle, onEventTap: onEventTap)
+                .offset(x: offsetX, y: 0)
+        }
+        .clipped()
+        .simultaneousGesture(
+            DragGesture(coordinateSpace: .local)
+                .onChanged { value in
+                    // Only respond to primarily horizontal gestures
+                    let horizontalMovement = abs(value.translation.width)
+                    let verticalMovement = abs(value.translation.height)
+                    
+                    // More stringent check: horizontal must be significantly more than vertical
+                    if horizontalMovement > max(verticalMovement * 2, 20) && value.translation.width < -10 {
+                        print("🔄 Horizontal swipe detected: \(value.translation.width)")
+                        offsetX = max(-80, value.translation.width)
+                        showingAction = horizontalMovement > 30
+                        print("📱 Setting offsetX to: \(offsetX), showingAction: \(showingAction)")
+                    }
+                }
+                .onEnded { value in
+                    let horizontalMovement = abs(value.translation.width)
+                    let verticalMovement = abs(value.translation.height)
+                    
+                    // Only handle completion if this was clearly a horizontal gesture
+                    if horizontalMovement > max(verticalMovement * 2, 20) && value.translation.width < -10 {
+                        print("🏁 Horizontal swipe ended: \(value.translation.width)")
+                        withAnimation(.spring()) {
+                            if horizontalMovement > 50 {
+                                offsetX = -80
+                                showingAction = true
+                                print("✅ Showing action button")
+                            } else {
+                                offsetX = 0
+                                showingAction = false
+                                print("❌ Hiding action button")
+                            }
+                        }
+                    }
+                }
+        )
+        .onTapGesture {
+            // Tap anywhere to dismiss swipe action
+            if showingAction {
+                withAnimation(.spring()) {
+                    offsetX = 0
+                    showingAction = false
+                }
+            }
         }
     }
 }
