@@ -100,13 +100,48 @@ struct ScannedOrderDetailView: View {
 
                 // MARK: — Line Items
                 List {
-                    Section(header: Text("Items")) {
+                    Section(header: Text("Order Items (\(order.totalItems) items)")) {
                         ForEach(order.items, id: \.productId) { item in
-                            HStack {
-                                Text("Product: \(item.productId.suffix(6))")
-                                Spacer()
-                                Text("\(item.size) – Qty: \(item.qty)")
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    Text(item.productTitle ?? "Product \(item.productId.suffix(6))")
+                                        .font(.headline)
+                                        .lineLimit(2)
+                                    Spacer()
+                                    Text("Qty: \(item.qty)")
+                                        .font(.subheadline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.cyan)
+                                }
+                                
+                                HStack {
+                                    Text("Size: \(item.size)")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                    
+                                    Spacer()
+                                    
+                                    if let price = item.productPrice {
+                                        VStack(alignment: .trailing, spacing: 2) {
+                                            Text("$\(String(format: "%.2f", price)) each")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                            Text("$\(String(format: "%.2f", item.totalPrice))")
+                                                .font(.subheadline)
+                                                .fontWeight(.semibold)
+                                                .foregroundColor(.cyan)
+                                        }
+                                    }
+                                }
+                                
+                                if item.qty > 1 {
+                                    Text("\(item.qty) × \(item.productTitle ?? "Product")")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .padding(.top, 2)
+                                }
                             }
+                            .padding(.vertical, 4)
                         }
                     }
                 }
@@ -116,7 +151,7 @@ struct ScannedOrderDetailView: View {
                     Button("Confirm Pickup") {
                         isConfirming = true
                     }
-                    .buttonStyle(ActionButtonStyle(color: .purple))
+                    .buttonStyle(ActionButtonStyle(color: .cyan))
                     .padding()
 
                 } else {
