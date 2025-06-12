@@ -170,9 +170,13 @@ class FirestoreService {
             }
             
             do {
-                let product = try snapshot.data(as: Product.self)
+                var product = try snapshot.data(as: Product.self)
+                // Ensure the document ID is set
+                product.id = snapshot.documentID
+                print("🔍 FirestoreService: Fetched product \(snapshot.documentID): \(product.title), imageUrl: \(product.imageUrl)")
                 completion(product, nil)
             } catch {
+                print("❌ FirestoreService: Error decoding product \(snapshot.documentID): \(error.localizedDescription)")
                 completion(nil, error)
             }
         }

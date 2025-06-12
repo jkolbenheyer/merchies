@@ -1,5 +1,6 @@
 import SwiftUI
 import Foundation
+import FirebaseStorage
 
 struct ScannedOrderDetailView: View {
     // Input parameters
@@ -12,6 +13,10 @@ struct ScannedOrderDetailView: View {
     @State private var errorMessage = ""
     @StateObject private var orderViewModel = OrderViewModel()
     @Environment(\.presentationMode) private var presentationMode
+    
+    // Product data for images
+    @State private var productDetails: [String: Product] = [:]
+    @State private var isLoadingProducts = true
 
     // Static formatter to avoid `let` inside the body
     private static let dateFormatter: DateFormatter = {
@@ -98,50 +103,26 @@ struct ScannedOrderDetailView: View {
                 .cornerRadius(10)
                 .padding(.horizontal)
 
-                // MARK: — Line Items
+                // MARK: — Line Items with Images
                 List {
                     Section(header: Text("Order Items (\(order.totalItems) items)")) {
-                        ForEach(order.items, id: \.productId) { item in
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    Text(item.productTitle ?? "Product \(item.productId.suffix(6))")
-                                        .font(.headline)
-                                        .lineLimit(2)
-                                    Spacer()
-                                    Text("Qty: \(item.qty)")
-                                        .font(.subheadline)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.cyan)
-                                }
-                                
-                                HStack {
-                                    Text("Size: \(item.size)")
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
-                                    
-                                    Spacer()
-                                    
-                                    if let price = item.productPrice {
-                                        VStack(alignment: .trailing, spacing: 2) {
-                                            Text("$\(String(format: "%.2f", price)) each")
-                                                .font(.caption)
-                                                .foregroundColor(.secondary)
-                                            Text("$\(String(format: "%.2f", item.totalPrice))")
-                                                .font(.subheadline)
-                                                .fontWeight(.semibold)
-                                                .foregroundColor(.cyan)
-                                        }
-                                    }
-                                }
-                                
-                                if item.qty > 1 {
-                                    Text("\(item.qty) × \(item.productTitle ?? "Product")")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                        .padding(.top, 2)
-                                }
+                        if isLoadingProducts {
+                            HStack {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                Text("Loading product details...")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                Spacer()
                             }
-                            .padding(.vertical, 4)
+                            .padding()
+                        } else {
+                            ForEach(order.items, id: \.productId) { item in
+                                OrderItemRowWithImage(
+                                    item: item,
+                                    product: productDetails[item.productId]
+                                )
+                            }
                         }
                     }
                 }
@@ -172,6 +153,9 @@ struct ScannedOrderDetailView: View {
                         onComplete()
                     }
                 }
+            }
+            .onAppear {
+                loadProductDetails()
             }
             .alert(isPresented: $isConfirming) {
                 Alert(
@@ -221,6 +205,226 @@ struct ScannedOrderDetailView: View {
             } message: {
                 Text(errorMessage)
             }
+        }
+    }
+    
+    // MARK: - Product Loading
+    
+    private func loadProductDetails() {
+        let productIds = Array(Set(order.items.map { $0.productId }))
+        print("🔍 ScannedOrderDetailView: Loading products for IDs: \(productIds)")
+        
+        let firestoreService = FirestoreService()
+        
+        let group = DispatchGroup()
+        var loadedProducts: [String: Product] = [:]
+        
+        for productId in productIds {
+            group.enter()
+            print("🔄 ScannedOrderDetailView: Fetching product \(productId)")
+            firestoreService.fetchProductById(productId: productId) { product, error in
+                defer { group.leave() }
+                
+                if let product = product {
+                    print("✅ ScannedOrderDetailView: Loaded product \(productId): \(product.title)")
+                    print("🖼️ ScannedOrderDetailView: Product image URL: \(product.imageUrl)")
+                    loadedProducts[productId] = product
+                } else {
+                    print("❌ ScannedOrderDetailView: Failed to load product \(productId): \(error?.localizedDescription ?? "Unknown error")")
+                }
+            }
+        }
+        
+        group.notify(queue: .main) {
+            print("📦 ScannedOrderDetailView: Finished loading \(loadedProducts.count) products")
+            self.productDetails = loadedProducts
+            self.isLoadingProducts = false
+        }
+    }
+}
+
+// MARK: - Order Item Row with Product Image
+struct OrderItemRowWithImage: View {
+    let item: OrderItem
+    let product: Product?
+    @State private var loadedProductImage: UIImage?
+    @State private var isLoadingImage = false
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Product Image
+            Group {
+                if let loadedImage = loadedProductImage {
+                    Image(uiImage: loadedImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 80, height: 80)
+                        .cornerRadius(12)
+                        .clipped()
+                } else if isLoadingImage {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 80, height: 80)
+                        .cornerRadius(12)
+                        .overlay(
+                            ProgressView()
+                                .scaleEffect(0.8)
+                                .progressViewStyle(CircularProgressViewStyle(tint: .cyan))
+                        )
+                } else {
+                    Rectangle()
+                        .fill(Color.cyan.opacity(0.2))
+                        .frame(width: 80, height: 80)
+                        .cornerRadius(12)
+                        .overlay(
+                            Image(systemName: "tshirt.fill")
+                                .font(.title2)
+                                .foregroundColor(.cyan)
+                        )
+                }
+            }
+            
+            // Product Details
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(item.productTitle ?? product?.title ?? "Product \(item.productId.suffix(6))")
+                        .font(.headline)
+                        .lineLimit(2)
+                    Spacer()
+                    
+                    // Quantity badge
+                    Text("×\(item.qty)")
+                        .font(.title3)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.cyan)
+                        .cornerRadius(20)
+                }
+                
+                HStack {
+                    Text("Size: \(item.size)")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(6)
+                    
+                    Spacer()
+                    
+                    if let price = item.productPrice {
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("$\(String(format: "%.2f", price)) each")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Text("$\(String(format: "%.2f", item.totalPrice))")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.cyan)
+                        }
+                    }
+                }
+                
+                // Additional product info if available
+                if let product = product {
+                    HStack {
+                        if !product.availableSizes.isEmpty {
+                            Text("Available: \(product.availableSizes.joined(separator: ", "))")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        if product.totalInventory > 0 {
+                            Text("\(product.totalInventory) in stock")
+                                .font(.caption)
+                                .foregroundColor(.green)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 8)
+        .onAppear {
+            loadProductImage()
+        }
+        .onChange(of: product?.imageUrl) { _ in
+            loadProductImage()
+        }
+        .onChange(of: product?.id) { _ in
+            // Reload image when product data becomes available
+            loadProductImage()
+        }
+    }
+    
+    private func loadProductImage() {
+        print("🔄 OrderItemRowWithImage: loadProductImage called for product \(item.productId)")
+        print("🔄 OrderItemRowWithImage: Product available: \(product != nil)")
+        print("🔄 OrderItemRowWithImage: Product title: \(product?.title ?? "nil")")
+        print("🔄 OrderItemRowWithImage: Product imageUrl: \(product?.imageUrl ?? "nil")")
+        
+        guard let imageUrl = product?.imageUrl, !imageUrl.isEmpty else {
+            print("🖼️ OrderItemRowWithImage: No image URL for product \(item.productId)")
+            return
+        }
+        
+        print("🖼️ OrderItemRowWithImage: Loading image from URL: \(imageUrl)")
+        
+        // If we already have a loaded image for this URL, don't reload
+        if loadedProductImage != nil {
+            print("🖼️ OrderItemRowWithImage: Image already loaded, skipping")
+            return
+        }
+        
+        isLoadingImage = true
+        
+        // Safe Firebase Storage loading with URL type detection
+        if imageUrl.contains("firebasestorage.googleapis.com") {
+            // Use Firebase Storage reference for Firebase URLs
+            do {
+                let storageRef = Storage.storage().reference(forURL: imageUrl)
+                storageRef.getData(maxSize: 10 * 1024 * 1024) { data, error in
+                    DispatchQueue.main.async {
+                        self.isLoadingImage = false
+                        if let error = error {
+                            print("❌ OrderItemRowWithImage: Error loading Firebase image: \(error.localizedDescription)")
+                        } else if let data = data, let image = UIImage(data: data) {
+                            print("✅ OrderItemRowWithImage: Successfully loaded Firebase image")
+                            self.loadedProductImage = image
+                        } else {
+                            print("❌ OrderItemRowWithImage: No data received from Firebase")
+                        }
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.isLoadingImage = false
+                    print("Invalid Firebase Storage URL: \(error.localizedDescription)")
+                }
+            }
+        } else {
+            // Use URLSession for regular HTTP URLs
+            guard let url = URL(string: imageUrl) else {
+                DispatchQueue.main.async {
+                    self.isLoadingImage = false
+                }
+                return
+            }
+            
+            URLSession.shared.dataTask(with: url) { data, response, error in
+                DispatchQueue.main.async {
+                    self.isLoadingImage = false
+                    if let error = error {
+                        print("❌ OrderItemRowWithImage: Error loading URL image: \(error.localizedDescription)")
+                    } else if let data = data, let image = UIImage(data: data) {
+                        print("✅ OrderItemRowWithImage: Successfully loaded URL image")
+                        self.loadedProductImage = image
+                    } else {
+                        print("❌ OrderItemRowWithImage: No data received from URL")
+                    }
+                }
+            }.resume()
         }
     }
 }
